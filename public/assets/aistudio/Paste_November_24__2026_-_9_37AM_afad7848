@@ -1,0 +1,752 @@
+package com.instaraj.app
+
+import android.content.Context
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.OutputStreamWriter
+import java.net.HttpURLConnection
+import java.net.URL
+
+class HotmailPool(private val context: Context) {
+
+    companion object {
+        private const val TAG = "HotmailPool"
+        private const val PREFS = "tp_hotmail_pool"
+        private const val KEY_POOL = "pool_json"
+        private const val TIMEOUT_MS = 15000
+
+        private const val DONGVAN_API_URL = "https://tools.dongvanfb.net/api/get_messages_oauth2"
+        private const val DONGVAN_REFERER = "https://dongvanfb.net/"
+        private const val DEFAULT_DONGVAN_CLIENT_ID = "9e5f94bc-e8a4-4e73-b8be-63364c29d753"
+        private const val PREFS_SEEN = "tp_seen_messages"
+
+        private const val META_PREFS = "tp_meta_pool_v1"
+        private const val KEY_META_POOL = "meta_pool_json"
+
+        private val EMAIL_REGEX = Regex("^[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}$")
+        private val UUID_REGEX = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+        private const val EXTRA_SEP = "\u0001"
+
+        const val STATUS_FRESH = "fresh"
+        const val STATUS_USED = "used"
+        const val STATUS_FAILED = "failed"
+        const val STATUS_INVALID = "invalid"
+
+        // 🟢 Instagram / Meta sender hints
+        private val META_SENDER_HINTS = listOf(
+            "instagram.com",
+            "mail.instagram.com",
+            "no-reply@mail.instagram.com",
+            "security@mail.instagram.com",
+            "notification@mail.instagram.com",
+            "facebookmail.com",
+            "meta.com"
+        )
+    }
+
+    data class Entry(
+        val email: String,
+        val password: String = "",
+        val cookies: String = "",
+        val refreshToken: String = "",
+        val clientId: String = "",
+        val recovery: String = "",
+        val rawLine: String = "",
+        var used: Boolean = false,
+        var usedAt: Long = 0L,
+        var lastStatus: String = "",
+        var lastCheckedAt: Long = 0L
+    ) {
+        fun fullKey(): String {
+            if (rawLine.isNotBlank() && rawLine.contains("|") && rawLine.contains("@")) return rawLine
+            val sb = StringBuilder()
+            sb.append(email)
+            if (password.isNotBlank()) sb.append('|').append(password)
+            if (refreshToken.isNotBlank()) sb.append('|').append(refreshToken)
+            if (clientId.isNotBlank()) sb.append('|').append(clientId)
+            if (recovery.isNotBlank()) sb.append('|').append(recovery)
+            return sb.toString()
+        }
+    }
+
+    data class MetaAccount(
+        val phone: String,
+        val password: String,
+        val twofa: String,
+        var used: Boolean = false
+    )
+
+    data class OtpResult(val success: Boolean, val otp: String = "", val rawText: String = "", val error: String = "")
+    enum class CheckStatus { FRESH, USED, AUTH_FAILED, NETWORK_ERROR, NO_IMAP, CHECK_FAILED, INVALID_FORMAT }
+    data class CheckResult(
+        val status: CheckStatus, val otpFound: String = "", val errorMessage: String = "",
+        val triedPassword: String = "", val scannedCount: Int = 0, val totalCount: Int = 0, val readErrors: Int = 0
+    )
+
+    data class AddCheckResult(
+        val addedFresh: Int,
+        val deletedUsed: Int,
+        val deletedInvalid: Int,
+        val totalInput: Int,
+        val poolFresh: Int,
+        val poolTotal: Int,
+        val markedFailed: Int = 0
+    )
+
+    // ═══════════ META POOL METHODS ═══════════
+
+    @Synchronized
+    fun addMetaAccounts(text: String): Triple<Int, Int, Int> {
+        val lines = text.replace("\r\n", "\n").split("\n").map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
+        if (lines.isEmpty()) return Triple(0, 0, 0)
+
+        val current = readMetaPool().toMutableList()
+        var added = 0
+
+        for (line in lines) {
+            val parts = line.split(Regex("\\s+"))
+            if (parts.size >= 2) {
+                val phone = parts[0].trim()
+                val pass = parts[1].trim()
+                val twofa = if (parts.size >= 3) parts[2].trim() else ""
+                if (current.none { it.phone == phone }) {
+                    current.add(MetaAccount(phone, pass, twofa))
+                    added++
+                }
+            }
+        }
+        writeMetaPool(current)
+        val fresh = current.count { !it.used }
+        return Triple(added, fresh, current.size)
+    }
+
+    @Synchronized
+    fun getNextMetaAccount(): MetaAccount? {
+        val current = readMetaPool()
+        val next = current.firstOrNull { !it.used }
+        if (next != null) {
+            next.used = true
+            writeMetaPool(current)
+            return next
+        }
+        return null
+    }
+
+    @Synchronized
+    fun getMetaStats(): String {
+        val current = readMetaPool()
+        val total = current.size
+        val fresh = current.count { !it.used }
+        val used = total - fresh
+        return """{"total":$total,"fresh":$fresh,"used":$used}"""
+    }
+
+    @Synchronized
+    fun clearMetaPool() {
+        context.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE).edit().remove(KEY_META_POOL).apply()
+    }
+
+    @Synchronized
+    fun saveMetaAccountsList(list: List<String>) {
+        val current = readMetaPool()
+        for (line in list) {
+            val parts = line.split(Regex("\\s+"))
+            if (parts.size >= 2) {
+                val phone = parts[0].trim()
+                val pass = parts[1].trim()
+                val twofa = if (parts.size >= 3) parts[2].trim() else ""
+                if (current.none { it.phone == phone }) {
+                    current.add(MetaAccount(phone, pass, twofa))
+                }
+            }
+        }
+        writeMetaPool(current)
+    }
+
+    @Synchronized
+    fun getMetaAccountsListRaw(): String {
+        val current = readMetaPool()
+        val arr = JSONArray()
+        for (acc in current) {
+            if (!acc.used) {
+                arr.put("${acc.phone} ${acc.password} ${acc.twofa}".trim())
+            }
+        }
+        return arr.toString()
+    }
+
+    private fun readMetaPool(): MutableList<MetaAccount> {
+        return try {
+            val json = context.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE).getString(KEY_META_POOL, "[]") ?: "[]"
+            val arr = JSONArray(json)
+            val out = mutableListOf<MetaAccount>()
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                out.add(MetaAccount(
+                    o.optString("phone", ""),
+                    o.optString("password", ""),
+                    o.optString("twofa", ""),
+                    o.optBoolean("used", false)
+                ))
+            }
+            out
+        } catch (e: Exception) { mutableListOf() }
+    }
+
+    private fun writeMetaPool(list: List<MetaAccount>) {
+        try {
+            val arr = JSONArray()
+            for (e in list) {
+                val o = JSONObject()
+                o.put("phone", e.phone)
+                o.put("password", e.password)
+                o.put("twofa", e.twofa)
+                o.put("used", e.used)
+                arr.put(o)
+            }
+            context.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE).edit().putString(KEY_META_POOL, arr.toString()).apply()
+        } catch (_: Exception) {}
+    }
+
+    // ═══════════ PARSING & MAIL METHODS ═══════════
+
+    fun parseAny(line: String): Entry? {
+        if (line.isBlank()) return null
+        return if (line.contains('|')) parsePipeLine(line) else parseColonLine(line)
+    }
+
+    private fun parsePipeLine(line: String): Entry? {
+        val original = line.trim(); if (original.isEmpty()) return null
+        val parts = original.split("|").map { it.trim() }
+        val emailIdx = parts.indexOfFirst { isValidEmail(it) }; if (emailIdx < 0) return null
+        val email = parts[emailIdx]
+        val candidates = mutableListOf<String>(); var recovery = ""
+        for ((i, p) in parts.withIndex()) {
+            if (i == emailIdx || p.isBlank()) continue
+            if (isValidEmail(p)) { if (recovery.isEmpty()) recovery = p; continue }
+            candidates.add(p)
+        }
+        val refreshToken = candidates.firstOrNull { isRefreshToken(it) } ?: ""
+        val clientId = candidates.firstOrNull { UUID_REGEX.matches(it) } ?: DEFAULT_DONGVAN_CLIENT_ID
+        val others = candidates.filter { it != refreshToken && it != clientId }
+        val password = others.getOrNull(0) ?: ""
+        val extras = if (others.size > 1) others.subList(1, others.size).joinToString(EXTRA_SEP) else ""
+        return Entry(email, password, extras, refreshToken, clientId, recovery, original)
+    }
+
+    private fun parseColonLine(line: String): Entry? {
+        val original = line.trim(); if (original.isEmpty()) return null
+        val parts = original.split(":").map { it.trim() }
+        val emailIdx = parts.indexOfFirst { isValidEmail(it) }; if (emailIdx < 0) return null
+        val email = parts[emailIdx]
+        val candidates = mutableListOf<String>(); var recovery = ""
+        for ((i, p) in parts.withIndex()) {
+            if (i == emailIdx || p.isBlank()) continue
+            if (isValidEmail(p)) { if (recovery.isEmpty()) recovery = p; continue }
+            candidates.add(p)
+        }
+        val refreshToken = candidates.firstOrNull { isRefreshToken(it) } ?: ""
+        val clientId = candidates.firstOrNull { UUID_REGEX.matches(it) } ?: DEFAULT_DONGVAN_CLIENT_ID
+        val others = candidates.filter { it != refreshToken && it != clientId }
+        return Entry(email, others.getOrNull(0) ?: "", "", refreshToken, clientId, recovery, original)
+    }
+
+    private fun isValidEmail(s: String): Boolean = s.isNotEmpty() && s.length <= 200 && EMAIL_REGEX.matches(s)
+
+    private fun isRefreshToken(s: String): Boolean {
+        if (s.length < 30) return false
+        return s.startsWith("M.C") || s.startsWith("M.R") || s.startsWith("0.A") ||
+               s.startsWith("OAQ") || s.startsWith("AwAB") || s.startsWith("EwA") ||
+               s.startsWith("EwB") || s.startsWith("1.A") || s.length > 300
+    }
+
+    // ═══════════ DONGVAN API (no javax.mail needed) ═══════════
+
+    private suspend fun readAllMessagesViaDongvanApi(entry: Entry): Pair<List<Map<String, String>>?, String> =
+        withContext(Dispatchers.IO) {
+            if (entry.refreshToken.isBlank()) return@withContext null to "No refresh token"
+            var conn: HttpURLConnection? = null
+            try {
+                conn = (URL(DONGVAN_API_URL).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"; doOutput = true
+                    connectTimeout = TIMEOUT_MS; readTimeout = TIMEOUT_MS
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("Origin", "https://dongvanfb.net")
+                    setRequestProperty("Referer", DONGVAN_REFERER)
+                    setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    setRequestProperty("x-requested-with", "mark.via.gp")
+                }
+                val clientId = entry.clientId.ifBlank { DEFAULT_DONGVAN_CLIENT_ID }
+                val payload = JSONObject().apply {
+                    put("email", entry.email); put("pass", entry.password)
+                    put("refresh_token", entry.refreshToken); put("client_id", clientId)
+                }
+                OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(payload.toString()) }
+                val code = conn.responseCode
+                val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+                val body = stream?.let { BufferedReader(it.reader(Charsets.UTF_8)).use { r -> r.readText() } } ?: ""
+                if (code != 200) return@withContext null to "Dongvan HTTP $code"
+                val j = JSONObject(body)
+                if (!j.optBoolean("status", false)) return@withContext null to "Dongvan: ${j.optString("content", "API error")}"
+                val arr = j.optJSONArray("messages") ?: JSONArray()
+                val out = mutableListOf<Map<String, String>>()
+                for (i in 0 until arr.length()) {
+                    val m = arr.optJSONObject(i) ?: continue
+                    val from = m.optString("from", ""); val subject = m.optString("subject", "")
+                    val msgBody = m.optString("message", ""); val preCode = m.optString("code", "")
+                    val dateStr = m.optString("date", "")
+                    val idHash = "$from|$subject|$dateStr|${msgBody.take(80)}".hashCode()
+                    out.add(mapOf(
+                        "id" to idHash.toString(), "subject" to subject, "from" to from,
+                        "body" to msgBody, "preview" to htmlToPlain(msgBody).take(200),
+                        "receivedDateTime" to dateStr, "receivedTimeMs" to "0", "code" to preCode
+                    ))
+                }
+                return@withContext out to ""
+            } catch (e: Exception) { return@withContext null to (e.message ?: "Network error") }
+            finally { try { conn?.disconnect() } catch (_: Exception) {} }
+        }
+
+    /**
+     * ⚠️ IMAP DISABLED — This build does not include javax.mail.
+     * For IMAP support, add to build.gradle:
+     *   implementation("com.sun.mail:android-mail:1.6.7")
+     *   implementation("com.sun.mail:android-activation:1.6.7")
+     * Then restore the IMAP methods from the original file.
+     */
+    private suspend fun readAllFoldersImap(entry: Entry): Pair<List<Map<String, String>>?, String> {
+        return null to "IMAP disabled (javax.mail not linked). Add dependency in build.gradle to enable."
+    }
+
+    private suspend fun readAllFoldersSmart(entry: Entry): Pair<List<Map<String, String>>?, String> {
+        if (entry.refreshToken.isNotBlank()) {
+            val (msgs, err) = readAllMessagesViaDongvanApi(entry)
+            if (msgs != null) return msgs to ""
+            // fall through only if Dongvan failed hard; IMAP is disabled
+            return null to err
+        }
+        if (entry.password.isNotBlank()) {
+            return null to "No refresh token. IMAP disabled — add javax.mail dependency to enable password login."
+        }
+        return null to "No credentials"
+    }
+
+    private fun htmlToPlain(html: String): String {
+        var s = html
+        s = s.replace(Regex("(?is)<(script|style|head)[^>]*>.*?</\\1>"), " ")
+        s = s.replace(Regex("(?i)<br\\s*/?>"), "\n")
+        s = s.replace(Regex("<[^>]+>"), " ")
+        s = Regex("&#(\\d+);").replace(s) { try { String(Character.toChars(it.groupValues[1].toInt())) } catch (_: Exception) { " " } }
+        s = s.replace(Regex("[\\u200B-\\u200D\\uFEFF\\u00A0]"), " ")
+        s = s.replace(Regex("[\\t\\x0B\\f\\r]+"), " ")
+        return s.trim()
+    }
+
+    private fun extractMetaOtp(text: String): String {
+        if (text.isBlank()) return ""
+        val cleaned = htmlToPlain(text)
+        val patterns = listOf(
+            Regex("(?<!\\d)(\\d{5,8})(?!\\d)\\s+is\\s+your\\s+(?:Instagram|Meta|IG|Facebook)", RegexOption.IGNORE_CASE),
+            Regex("(?:code|otp)\\s+(?:is|:)?\\s*(?<!\\d)(\\d{5,8})(?!\\d)", RegexOption.IGNORE_CASE),
+            Regex("(?:IG|Instagram|Meta|Facebook)[^0-9]{0,80}(\\d{5,8})", RegexOption.IGNORE_CASE)
+        )
+        for (p in patterns) p.find(cleaned)?.let { return it.groupValues[1] }
+        Regex("(?<!\\d)((?:\\d[\\s\\-]){4,7}\\d)(?!\\d)").findAll(cleaned).forEach { m ->
+            val digits = m.value.replace(Regex("[\\s\\-]"), "")
+            if (digits.length in 5..8) return digits
+        }
+        return ""
+    }
+
+    private fun isMetaMessage(msg: Map<String, String>): Boolean {
+        val from = (msg["from"] ?: "").lowercase()
+        val combined = "$from\n${msg["subject"]}\n${msg["preview"]}\n${msg["body"]}".lowercase()
+        val isMetaSender = META_SENDER_HINTS.any { from.contains(it) }
+        val hasMetaBody = (combined.contains("instagram") || combined.contains("meta") || combined.contains("facebook")) &&
+                          (combined.contains("code") || combined.contains("verification") || combined.contains("security"))
+        return isMetaSender || hasMetaBody
+    }
+
+    private fun analyzeMessages(messages: List<Map<String, String>>, triedPassword: String): CheckResult {
+        if (messages.isEmpty()) return CheckResult(status = CheckStatus.FRESH, triedPassword = triedPassword)
+        for (msg in messages) {
+            if (isMetaMessage(msg)) {
+                val preCode = (msg["code"] ?: "").trim()
+                val otp = if (preCode.isNotEmpty()) preCode
+                          else extractMetaOtp("${msg["from"]}\n${msg["subject"]}\n${msg["preview"]}\n${msg["body"]}")
+                return CheckResult(CheckStatus.USED, otp, "", triedPassword, messages.size, messages.size)
+            }
+        }
+        return CheckResult(CheckStatus.FRESH, "", "", triedPassword, messages.size, messages.size)
+    }
+
+    @Synchronized
+    private fun readAll(): MutableList<Entry> {
+        return try {
+            val json = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_POOL, "[]") ?: "[]"
+            val arr = JSONArray(json)
+            val out = mutableListOf<Entry>()
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val email = o.optString("email", "").trim()
+                if (email.isNotEmpty()) {
+                    out.add(Entry(
+                        email, o.optString("password", "").trim(), o.optString("cookies", "").trim(),
+                        o.optString("refreshToken", "").trim(), o.optString("clientId", "").trim(),
+                        o.optString("recovery", "").trim(), o.optString("rawLine", "").trim(),
+                        o.optBoolean("used", false), o.optLong("usedAt", 0L),
+                        o.optString("lastStatus", "").trim(), o.optLong("lastCheckedAt", 0L)
+                    ))
+                }
+            }
+            out
+        } catch (e: Exception) { mutableListOf() }
+    }
+
+    @Synchronized
+    private fun writeAll(list: List<Entry>) {
+        try {
+            val arr = JSONArray()
+            for (e in list) {
+                val o = JSONObject()
+                o.put("email", e.email); o.put("password", e.password); o.put("cookies", e.cookies)
+                o.put("refreshToken", e.refreshToken); o.put("clientId", e.clientId); o.put("recovery", e.recovery)
+                o.put("rawLine", e.rawLine); o.put("used", e.used); o.put("usedAt", e.usedAt)
+                o.put("lastStatus", e.lastStatus); o.put("lastCheckedAt", e.lastCheckedAt)
+                arr.put(o)
+            }
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_POOL, arr.toString()).apply()
+        } catch (_: Exception) {}
+    }
+
+    fun getAllEntriesForCheck(): List<Entry> = readAll()
+
+    fun getStats(): Triple<Int, Int, Int> {
+        val list = readAll(); val total = list.size; val used = list.count { it.used }
+        return Triple(total, total - used, used)
+    }
+
+    fun getStatsJson(): String {
+        val list = readAll()
+        val total = list.size
+        val fresh = list.count { !it.used }
+        val taken = list.count { it.used && it.lastStatus == STATUS_FRESH }
+        val hasMsgs = list.count { it.used && it.lastStatus == STATUS_USED }
+        val failed = list.count { it.used && it.lastStatus == STATUS_FAILED }
+        val invalid = list.count { it.lastStatus == STATUS_INVALID }
+        return """{"total":$total,"fresh":$fresh,"used":${taken + hasMsgs},"taken":$taken,"hasMsgs":$hasMsgs,"failed":$failed,"invalid":$invalid}"""
+    }
+
+    @Synchronized
+    fun markUsed(email: String): Boolean {
+        if (email.isBlank()) return false
+        val list = readAll(); var changed = false
+        for (e in list) {
+            if (e.email.lowercase() == email.trim().lowercase() && !e.used) {
+                e.used = true; e.usedAt = System.currentTimeMillis(); changed = true
+            }
+        }
+        if (changed) writeAll(list)
+        return changed
+    }
+
+    @Synchronized
+    fun remove(email: String): Boolean {
+        if (email.isBlank()) return false
+        val list = readAll(); val before = list.size
+        list.removeAll { it.email.lowercase() == email.trim().lowercase() }
+        if (list.size < before) { writeAll(list); return true }
+        return false
+    }
+
+    fun clearAll(): Boolean = try {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_POOL, "[]").apply()
+        context.getSharedPreferences(PREFS_SEEN, Context.MODE_PRIVATE).edit().clear().apply()
+        true
+    } catch (_: Exception) { false }
+
+    fun getEntryByEmail(email: String): Entry? {
+        val e = email.trim().lowercase()
+        if (e.isEmpty()) return null
+        return readAll().firstOrNull { it.email.lowercase() == e }
+    }
+
+    fun peekNextFresh(): String {
+        val fresh = readAll().firstOrNull { !it.used }
+        return fresh?.fullKey() ?: ""
+    }
+
+    fun getAllEmailsJson(): String {
+        val arr = JSONArray()
+        for (e in readAll()) {
+            val o = JSONObject()
+            o.put("email", e.email)
+            o.put("password", e.password)
+            o.put("used", e.used)
+            o.put("usedAt", e.usedAt)
+            o.put("rawLine", e.rawLine)
+            o.put("lastStatus", e.lastStatus)
+            o.put("lastCheckedAt", e.lastCheckedAt)
+            arr.put(o)
+        }
+        return arr.toString()
+    }
+
+    @Synchronized
+    fun resetAllUsed(): Boolean {
+        val list = readAll(); var changed = false
+        for (e in list) {
+            if (e.used) {
+                e.used = false; e.usedAt = 0L
+                if (e.lastStatus == STATUS_FRESH) e.lastStatus = ""
+                changed = true
+            }
+        }
+        if (changed) writeAll(list)
+        return true
+    }
+
+    @Synchronized
+    fun markFresh(email: String): Boolean {
+        if (email.isBlank()) return false
+        val list = readAll(); var changed = false
+        for (e in list) {
+            if (e.email.lowercase() == email.trim().lowercase() && e.used) {
+                e.used = false; e.usedAt = 0L
+                if (e.lastStatus == STATUS_FRESH) e.lastStatus = ""
+                changed = true
+            }
+        }
+        if (changed) writeAll(list)
+        return changed
+    }
+
+    fun isFresh(email: String): Boolean = getEntryByEmail(email)?.let { !it.used } ?: false
+
+    fun getImapPasswordFor(email: String): String = getEntryByEmail(email)?.password ?: ""
+
+    suspend fun testCredentials(email: String, password: String): Pair<Boolean, String> {
+        return withContext(Dispatchers.IO) {
+            try {
+                // Without javax.mail, we can only test via Dongvan (needs refresh token)
+                val entry = getEntryByEmail(email) ?: Entry(email = email, password = password)
+                if (entry.refreshToken.isBlank()) {
+                    return@withContext false to "IMAP disabled. Only refresh-token accounts can be tested."
+                }
+                val (messages, err) = readAllMessagesViaDongvanApi(entry)
+                if (messages == null) false to (err.ifBlank { "Connection failed" })
+                else true to "OK (${messages.size} messages)"
+            } catch (e: Exception) { false to (e.message ?: "Error") }
+        }
+    }
+
+    suspend fun checkForNewMessagesAndNotify(email: String) {
+        withContext(Dispatchers.IO) {
+            try {
+                val entry = getEntryByEmail(email) ?: return@withContext
+                val (messages, _) = readAllFoldersSmart(entry)
+                Log.d(TAG, "checkForNewMessagesAndNotify: ${messages?.size ?: 0} msgs for $email")
+            } catch (_: Exception) {}
+        }
+    }
+
+    suspend fun addAndCheckFreshOnly(
+        text: String,
+        onProgress: (String, String) -> Unit = { _, _ -> }
+    ): AddCheckResult = withContext(Dispatchers.IO) {
+        val lines = text.replace("\r\n", "\n").split("\n").map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+        if (lines.isEmpty()) return@withContext AddCheckResult(0, 0, 0, 0, 0, 0)
+
+        val currentList = readAll()
+        val existingEmails = currentList.map { it.email.lowercase() }.toMutableSet()
+        val validEntries = mutableListOf<Entry>()
+        var deletedInvalid = 0
+
+        for (line in lines) {
+            val entry = parseAny(line)
+            if (entry == null) { deletedInvalid++; onProgress("(invalid)", "invalid"); continue }
+            if (entry.email.lowercase() in existingEmails) { onProgress(entry.email, "already_in_pool"); continue }
+            if (entry.refreshToken.isBlank() && entry.password.isBlank()) {
+                deletedInvalid++; onProgress(entry.email, "no_credentials"); continue
+            }
+            validEntries.add(entry)
+        }
+
+        var addedFresh = 0
+        var markedUsed = 0
+        var markedFailed = 0
+        val keptEntries = currentList.toMutableList()
+        val semaphore = Semaphore(5)
+        val now = System.currentTimeMillis()
+
+        coroutineScope {
+            validEntries.map { entry ->
+                async {
+                    semaphore.withPermit {
+                        onProgress(entry.email, "checking")
+                        val result = try { checkMail(entry) }
+                                     catch (_: Exception) { CheckResult(CheckStatus.NETWORK_ERROR) }
+                        when (result.status) {
+                            CheckStatus.FRESH -> {
+                                synchronized(keptEntries) {
+                                    keptEntries.add(entry.copy(
+                                        used = false, usedAt = 0L,
+                                        lastStatus = STATUS_FRESH, lastCheckedAt = now
+                                    ))
+                                    addedFresh++
+                                }
+                                onProgress(entry.email, "fresh")
+                            }
+                            CheckStatus.USED -> {
+                                synchronized(keptEntries) {
+                                    keptEntries.add(entry.copy(
+                                        used = true, usedAt = now,
+                                        lastStatus = STATUS_USED, lastCheckedAt = now
+                                    ))
+                                    markedUsed++
+                                }
+                                onProgress(entry.email, "used_kept")
+                            }
+                            else -> {
+                                synchronized(keptEntries) {
+                                    keptEntries.add(entry.copy(
+                                        used = true, usedAt = now,
+                                        lastStatus = STATUS_FAILED, lastCheckedAt = now
+                                    ))
+                                    markedFailed++
+                                }
+                                onProgress(entry.email, "failed_kept")
+                            }
+                        }
+                    }
+                }
+            }.awaitAll()
+        }
+
+        writeAll(keptEntries)
+        val (totalAfter, freshAfter, _) = getStats()
+        AddCheckResult(
+            addedFresh = addedFresh,
+            deletedUsed = markedUsed,
+            deletedInvalid = deletedInvalid,
+            totalInput = lines.size,
+            poolFresh = freshAfter,
+            poolTotal = totalAfter,
+            markedFailed = markedFailed
+        )
+    }
+
+    suspend fun checkMail(entry: Entry): CheckResult {
+        if (entry.email.isBlank()) return CheckResult(CheckStatus.INVALID_FORMAT)
+        if (entry.refreshToken.isBlank() && entry.password.isBlank()) return CheckResult(CheckStatus.AUTH_FAILED)
+        return withContext(Dispatchers.IO) {
+            val (messages, readError) = readAllFoldersSmart(entry)
+            if (messages == null) return@withContext CheckResult(CheckStatus.AUTH_FAILED, errorMessage = readError)
+            analyzeMessages(messages, entry.password)
+        }
+    }
+
+    fun getInstantFreshMail(): String {
+        val list = readAll()
+        val fresh = list.firstOrNull { !it.used }
+        if (fresh != null) { markUsed(fresh.email); return fresh.fullKey() }
+        return ""
+    }
+
+    suspend fun fetchOtp(email: String, passwordOverride: String = ""): OtpResult {
+        return withContext(Dispatchers.IO) {
+            val base = readAll().firstOrNull { it.email.lowercase() == email.trim().lowercase() }
+                       ?: Entry(email = email, password = passwordOverride)
+            val entry = base.copy(password = if (passwordOverride.isNotBlank()) passwordOverride else base.password)
+            val (messages, err) = readAllFoldersSmart(entry)
+            if (messages == null) return@withContext OtpResult(false, error = "Read failed: $err")
+            if (messages.isEmpty()) return@withContext OtpResult(false, error = "No messages yet")
+            for (msg in messages) {
+                if (!isMetaMessage(msg)) continue
+                val preCode = (msg["code"] ?: "").trim()
+                val otp = if (preCode.isNotEmpty()) preCode
+                          else extractMetaOtp("${msg["from"]}\n${msg["subject"]}\n${msg["preview"]}\n${msg["body"]}")
+                if (otp.isNotEmpty()) return@withContext OtpResult(true, otp = otp)
+            }
+            OtpResult(false, error = "No OTP found")
+        }
+    }
+
+    suspend fun reCheckFailedEntries(
+        onProgress: (String, String) -> Unit = { _, _ -> }
+    ): AddCheckResult = withContext(Dispatchers.IO) {
+        val currentList = readAll()
+        val failedEntries = currentList.filter { it.lastStatus == STATUS_FAILED }
+        if (failedEntries.isEmpty()) {
+            val (total, fresh, _) = getStats()
+            return@withContext AddCheckResult(0, 0, 0, 0, fresh, total, 0)
+        }
+
+        var recoveredFresh = 0
+        var stillFailed = 0
+        val keptEntries = currentList.toMutableList()
+        val semaphore = Semaphore(5)
+        val now = System.currentTimeMillis()
+
+        coroutineScope {
+            failedEntries.map { entry ->
+                async {
+                    semaphore.withPermit {
+                        onProgress(entry.email, "checking")
+                        val result = try { checkMail(entry) }
+                                     catch (_: Exception) { CheckResult(CheckStatus.NETWORK_ERROR) }
+                        synchronized(keptEntries) {
+                            val idx = keptEntries.indexOfFirst { it.email.lowercase() == entry.email.lowercase() }
+                            if (idx >= 0) {
+                                when (result.status) {
+                                    CheckStatus.FRESH -> {
+                                        keptEntries[idx] = keptEntries[idx].copy(
+                                            used = false, usedAt = 0L,
+                                            lastStatus = STATUS_FRESH, lastCheckedAt = now
+                                        )
+                                        recoveredFresh++
+                                        onProgress(entry.email, "fresh")
+                                    }
+                                    CheckStatus.USED -> {
+                                        keptEntries[idx] = keptEntries[idx].copy(
+                                            used = true, usedAt = now,
+                                            lastStatus = STATUS_USED, lastCheckedAt = now
+                                        )
+                                        stillFailed++
+                                        onProgress(entry.email, "used_kept")
+                                    }
+                                    else -> {
+                                        keptEntries[idx] = keptEntries[idx].copy(
+                                            lastStatus = STATUS_FAILED, lastCheckedAt = now
+                                        )
+                                        stillFailed++
+                                        onProgress(entry.email, "failed_kept")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }.awaitAll()
+        }
+
+        writeAll(keptEntries)
+        val (totalAfter, freshAfter, _) = getStats()
+        AddCheckResult(recoveredFresh, 0, 0, failedEntries.size, freshAfter, totalAfter, stillFailed)
+    }
+
+    fun getFreshEntries(): List<Entry> = readAll().filter { !it.used }
+    fun getUsedEntries(): List<Entry> = readAll().filter { it.used && it.lastStatus == STATUS_USED }
+    fun getFailedEntries(): List<Entry> = readAll().filter { it.lastStatus == STATUS_FAILED }
+}

@@ -1,0 +1,2248 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#121212">
+<title>TP</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+html,body{background:#121212;}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#121212;color:#eee;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;user-select:none;-webkit-user-select:none;}
+input,textarea,select{user-select:text;-webkit-user-select:text}
+
+.app{position:fixed;inset:0;width:100%;height:100dvh;display:flex;flex-direction:column;overflow:hidden;background:#121212;z-index:1;}
+.brandbar{flex:0 0 40px;height:40px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;background:#050505;color:#fff;font-size:14px;font-weight:900;letter-spacing:.3px;border-bottom:1px solid #222;}
+.brandbar > span { flex: 1; }
+.tp-brand-text { text-align: left; }
+.brandbar-right{text-align: right; font-size:10px;color:#9ec5ff;font-weight:700;}
+.brandbar-icons { display:flex; align-items:center; gap:8px; flex:0 0 auto; }
+.brandbar-icons span { cursor:pointer; font-size:18px; padding: 0 4px; }
+
+/* TOP GRID */
+.top-grid{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4, 38px);gap:3px;padding:0px 1px 2px 1px;background:#0d0f12;flex:0 0 auto;height:163px;overflow:hidden;}
+.top-grid .tab{width:100%;min-width:0;border-radius:6px;font-size:13px;font-weight:900;padding:0 1px;color:#fff;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:transform .08s ease;position:relative;z-index:2;height:100%;line-height:1.1;text-shadow:0 1px 3px rgba(0,0,0,.8);border-width:2px;border-style:solid;display:flex;align-items:center;justify-content:center;gap:2px;}
+.top-grid .tab:active{transform:translateY(2px);box-shadow:inset 0 2px 5px rgba(0,0,0,.75) !important;}
+.top-grid .top1{background:linear-gradient(180deg,#4c1d95,#2e1065);border-color:#a78bfa;box-shadow:inset 0 1px 0 rgba(255,255,255,.18), 0 3px 0 #1e1b4b, 0 4px 8px rgba(0,0,0,.5);}
+.top-grid .top2{background:linear-gradient(180deg,#9a3412,#7c2d12);border-color:#fb923c;box-shadow:inset 0 1px 0 rgba(255,255,255,.18), 0 3px 0 #431407, 0 4px 8px rgba(0,0,0,.5);}
+.top-grid .top3{background:linear-gradient(180deg,#0f766e,#115e59);border-color:#2dd4bf;box-shadow:inset 0 1px 0 rgba(255,255,255,.18), 0 3px 0 #042f2e, 0 4px 8px rgba(0,0,0,.5);}
+.top-grid .top4{background:linear-gradient(180deg,#be185d,#9d174d);border-color:#f472b6;box-shadow:inset 0 1px 0 rgba(255,255,255,.18), 0 3px 0 #500724, 0 4px 8px rgba(0,0,0,.5);}
+.top-grid .top5{background:linear-gradient(180deg,#1d4ed8,#1e40af);border-color:#60a5fa;box-shadow:inset 0 1px 0 rgba(255,255,255,.18), 0 3px 0 #172554, 0 4px 8px rgba(0,0,0,.5);}
+.top-grid .top6{background:linear-gradient(180deg,#15803d,#166534);border-color:#4ade80;box-shadow:inset 0 1px 0 rgba(255,255,255,.18), 0 3px 0 #052e16, 0 4px 8px rgba(0,0,0,.5);}
+.top-grid .top7{background:linear-gradient(180deg,#b45309,#92400e);border-color:#fbbf24;box-shadow:inset 0 1px 0 rgba(255,255,255,.18), 0 3px 0 #451a03, 0 4px 8px rgba(0,0,0,.5);}
+
+.content{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden;position:relative;}
+
+.status{margin:0px 1px 2px 1px;background:#000;color:#fff;height:64px;padding:6px 8px;position:relative;border:1px solid #222;border-radius:6px;overflow:hidden;flex:0 0 64px;}
+.status-info{position:absolute;left:8px;top:6px;right:120px;display:flex;flex-direction:column;gap:3px;max-width:100%;}
+.status-info .line{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12.5px;font-weight:800;padding:3px 8px;border-radius:6px;text-shadow:0 1px 2px rgba(0,0,0,.6);border:2px solid;height:24px;line-height:16px;}
+#dispCountry{background:linear-gradient(180deg,#0d3a45,#051a22);border-color:#22d3ee;color:#cffafe;}
+#dispNumber{background:linear-gradient(180deg,#3a1d5c,#1a0a2e);border-color:#a855f7;color:#e9d5ff;cursor:pointer;}
+.status-side{position:absolute;right:8px;top:6px;min-width:100px;width:100px;text-align:right;display:flex;flex-direction:column;gap:5px;align-items:flex-end;}
+.status .otp{display:flex;align-items:center;justify-content:center;white-space:nowrap;color:#fecaca;font-weight:900;font-size:18px;padding:6px 10px;border-radius:6px;text-shadow:0 1px 2px rgba(0,0,0,.7);border:2px solid #ef4444;background:linear-gradient(180deg,#7f1d1d,#450a0a);box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 3px 0 #2a0606, 0 0 10px rgba(239,68,68,.35);letter-spacing:1px;cursor:pointer;width:100%;height:48px;transition:transform .1s ease;}
+
+.web-area{flex:1 1 auto;min-height:0;margin:0px 0 2px 0;background:#0b0d10;border-top:1px solid #232730;border-bottom:1px solid #232730;overflow:hidden;position:relative;z-index:1;}
+.web-area iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#121212;display:block;z-index:1;}
+.web-loader{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;background:#121212;color:#8b93a3;font-size:13px;transition:opacity .15s ease;z-index:5;pointer-events:none;}
+.web-loader.hide{opacity:0}
+.web-loader .spin{width:26px;height:26px;border-radius:50%;border:3px solid #233042;border-top-color:#3b82f6;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.tg-sheet-backdrop{position:fixed;inset:0;z-index:2147483645;background:rgba(0,0,0,0.68);backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center;padding:8px 6px;}
+.tg-sheet-backdrop.open{display:flex;animation:tgSheetFade .15s ease-out;}
+@keyframes tgSheetFade{from{opacity:0;}to{opacity:1;}}
+.tg-sheet-panel{width:100%;max-width:600px;height:90vh;max-height:90vh;background:#0e1621;border:2px solid #38bdf8;border-radius:14px;box-shadow:0 16px 48px rgba(0,0,0,0.95), 0 0 0 1px rgba(56,189,248,0.25);display:flex;flex-direction:column;overflow:hidden;animation:tgSheetPop .18s cubic-bezier(0.22, 0.61, 0.36, 1);}
+@keyframes tgSheetPop{from{transform:scale(0.96) translateY(12px);opacity:0.65;}to{transform:scale(1) translateY(0);opacity:1;}}
+.tg-sheet-header{flex:0 0 46px;height:46px;background:#17212b;border-bottom:1px solid #263648;padding:0 10px 0 12px;display:flex;align-items:center;justify-content:space-between;gap:6px;}
+.tg-sheet-title{display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:900;color:#fff;white-space:nowrap;}
+.tg-sheet-title svg{width:18px;height:18px;fill:#2aabee;flex-shrink:0;}
+.tg-sheet-actions{display:flex;align-items:center;gap:5px;flex-shrink:0;}
+.tg-pill-btn{height:28px;padding:0 8px;border-radius:7px;border:1px solid #334155;background:#23303d;color:#f1f5f9;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap;}
+.tg-pill-btn.active-on{background:#14532d;border-color:#22c55e;color:#dcfce7;}
+.tg-pill-btn.active-off{background:#7f1d1d;border-color:#ef4444;color:#fecaca;}
+.tg-pill-btn.locked-on{background:#78350f;border-color:#fbbf24;color:#fef3c7;}
+.tg-sheet-close{width:28px;height:28px;border-radius:50%;border:1px solid #f87171;background:#dc2626;color:#fff;font-size:15px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+
+.tg-2fa-bar{flex:0 0 auto;background:#121b24;border-bottom:1px solid #243447;padding:7px 10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.tg-2fa-input{flex:1 1 150px;min-width:120px;height:32px;border:1px solid #334155;border-radius:7px;background:#0b1117;color:#f8fafc;padding:0 9px;font-size:12px;font-family:monospace;outline:none;}
+.tg-2fa-btn{height:32px;padding:0 10px;border-radius:7px;border:1px solid #38bdf8;background:#0284c7;color:#fff;font-size:11.5px;font-weight:800;cursor:pointer;white-space:nowrap;}
+.tg-2fa-btn.gen{background:#15803d;border-color:#4ade80;}
+
+.tg-sheet-body{flex:1 1 auto;min-height:0;position:relative;background:#0e1621;}
+.tg-web-frame{width:100%;height:100%;border:0;background:#0e1621;display:block;}
+.tg-off-notice{position:absolute;inset:0;background:#0e1621;display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;padding:20px;text-align:center;color:#94a3b8;font-size:13px;z-index:5;}
+.tg-off-notice.show{display:flex;}
+
+.bottom{flex:0 0 auto;min-height:46px;display:flex;gap:4px;padding:4px 4px calc(6px + env(safe-area-inset-bottom)) 4px;background:#24272b;border-top:1px solid #333;position:relative;z-index:25;}
+.bottom button{flex:1;min-width:0;height:38px;border-radius:5px;font-size:12px;font-weight:800;padding:0 3px;white-space:nowrap;cursor:pointer;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 2px rgba(0,0,0,.6);color:#fff;border-width:2px;border-style:solid;transition:transform .08s ease;}
+.bottom button:active{transform:translateY(2px);box-shadow:inset 0 2px 5px rgba(0,0,0,.75) !important;}
+.bottom1{background:linear-gradient(180deg,#1e3a8a,#0e1e4a);border-color:#3b82f6;}
+.bottom2{background:linear-gradient(180deg,#14532d,#052e16);border-color:#22c55e;}
+.bottom3{background:linear-gradient(180deg,#78350f,#3a1a06);border-color:#f59e0b;}
+.bottom4{background:linear-gradient(180deg,#7f1d1d,#450a0a);border-color:#ef4444;}
+
+.overlay{display:block;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:2147483640;opacity:0;pointer-events:none;transition:opacity .14s ease;touch-action:none;}
+.overlay.open{opacity:1;pointer-events:auto;}
+.overlay.open.closing{opacity:0;pointer-events:none;}
+.drawer{position:fixed;z-index:2147483641;top:0;bottom:0;left:0;width:82vw;max-width:400px;background:linear-gradient(180deg,#101114 0%,#0a0b0d 100%);border-right:2px solid #334155;overflow-y:auto;padding:max(14px, env(safe-area-inset-top)) 12px max(18px, env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch;transform:translate3d(-100%,0,0);transition:transform .16s cubic-bezier(.22,.61,.36,1);box-shadow:8px 0 30px rgba(0,0,0,.85);will-change:transform;}
+.drawer.open{transform:translate3d(0,0,0);}
+.drawer.open.closing{transform:translate3d(-100%,0,0);}
+body.drawer-open{overflow:hidden !important;}
+.close{float:right;background:#1e293b;border:1px solid rgba(255,255,255,.35);color:#fff;font-size:18px;border-radius:50%;width:30px;height:30px;line-height:26px;cursor:pointer;}
+.drawer-brand{color:#fff;font-size:18px;font-weight:900;letter-spacing:.5px;}
+.drawer-subtitle{color:#a6adba;font-size:12px;margin-top:2px;font-weight:600;}
+
+.menu-settings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
+.menu-settings button{min-height:42px;padding:6px 4px;border:2px solid #fff;border-radius:8px;background:#171a20;color:#fff;font-size:12px;font-weight:800;cursor:pointer;transition:transform .06s ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;justify-content:center;box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 3px 0 rgba(0,0,0,0.5);}
+.menu-settings button:active{opacity:.8;transform:translateY(2px);box-shadow:none;}
+.menu-settings button:nth-child(1){border-color:#3b82f6;background:#1e3a8a;}
+.menu-settings button:nth-child(2){border-color:#fbbf24;background:#78350f;}
+.menu-settings button:nth-child(3){border-color:#c084fc;background:#4c1d95;}
+.menu-settings button:nth-child(4){border-color:#f472b6;background:#831843;}
+.menu-settings button:nth-child(5){border-color:#fb923c;background:#7c2d12;}
+.menu-settings button:nth-child(6){border-color:#38bdf8;background:#0c4a6e;}
+.menu-settings button:nth-child(7){border-color:#34d399;background:#064e3b;}
+.menu-settings button:nth-child(8){border-color:#ef4444;background:#7f1d1d;}
+.menu-settings button:nth-child(9){border-color:#22c55e;background:#14532d;}
+.menu-settings button:nth-child(10){border-color:#eab308;background:#713f12;}
+
+.menu-settings button.admin-btn{border-color:#06b6d4;background:#164e63;color:#a5f3fc;}
+.menu-settings button.meta-toggle-btn{border-color:#10b981;background:#064e3b;color:#6ee7b7;}
+.menu-settings button.meta-toggle-btn.on{border-color:#fbbf24;background:#78350f;color:#fde68a;}
+.menu-settings button.set-meta-btn{border-color:#d97706;background:#451a03;color:#fde68a;}
+.menu-settings button.join-channel-btn{border-color:#38bdf8;background:linear-gradient(135deg,#229ed9,#1677c8);color:#fff;grid-column: 1 / -1;font-size: 14px;font-weight: 900;}
+
+.modal-backdrop{display:none;position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,.78);align-items:center;justify-content:center;padding:10px;}
+.modal-backdrop.open{display:flex}
+.mini-modal{position:relative;width:min(440px,95vw);max-height:92vh;display:flex;flex-direction:column;background:#161920;border:1px solid #334155;border-radius:16px;color:#fff;box-shadow:0 20px 60px #000;overflow:hidden;animation:modalPop .14s ease-out;z-index:2147483646;}
+@keyframes modalPop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.mini-modal h3{margin:16px 40px 10px 16px;font-size:19px;font-weight:900;color:#f1f5f9;flex-shrink:0;}
+.modal-close{position:absolute;right:12px;top:12px;width:30px;height:30px;border-radius:50%;border:1px solid #475569;background:#1e293b;color:#cbd5e1;font-size:18px;line-height:26px;cursor:pointer;z-index:5;display:flex;align-items:center;justify-content:center;}
+#modalBody{flex:1 1 auto;overflow-y:auto;padding:0 16px 12px 16px; -webkit-overflow-scrolling: touch;}
+.modal-actions{display:flex;gap:8px;padding:10px 16px 16px 16px;flex-wrap:wrap;flex-shrink:0;}
+.modal-actions button{flex:1;min-width:80px;min-height:42px;border:1px solid #475569;border-radius:10px;background:#262f3d;color:#fff;font-weight:800;cursor:pointer;font-size:14px;}
+.modal-actions button:active{transform:scale(0.97)}
+.modal-actions .modal-primary{background:#16a34a;border-color:#22c55e;}
+.modal-actions .modal-blue-full{background:#2563eb;border-color:#3b82f6;font-size:15px;box-shadow:0 4px 12px rgba(37,99,235,.4);}
+.modal-label{display:block;color:#aeb8c4;font-size:13px;margin:8px 0 4px;font-weight:bold;}
+.modal-input,.modal-textarea{width:100%;border:1px solid #46515e;border-radius:8px;background:#20252c;color:#fff;padding:10px;font-size:14px;outline:none;}
+.modal-textarea{height:110px;resize:none;font-family:monospace;font-size:12px;line-height:1.5}
+.modal-note{color:#aeb8c4;line-height:1.45;margin:6px 0;font-size:12px}
+
+.mini-modal.large-modal{width:min(820px, 96vw) !important;max-height:94vh !important;background:#14171f !important;border:1px solid #2d3748 !important;}
+
+.sd-stats-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+.sd-stat-box{border-radius:12px;padding:12px 8px;text-align:center;color:#fff;box-shadow:0 4px 12px rgba(0,0,0,.35);}
+.sd-stat-blue{background:linear-gradient(180deg,#2563eb,#1d4ed8);border:1px solid #60a5fa;}
+.sd-stat-green{background:linear-gradient(180deg,#16a34a,#15803d);border:1px solid #4ade80;}
+.sd-stat-label{font-size:11px;font-weight:800;letter-spacing:.8px;opacity:.9;text-transform:uppercase;}
+.sd-stat-val{font-size:24px;font-weight:900;margin-top:2px;line-height:1.1;}
+.sd-list{display:flex;flex-direction:column;gap:10px;max-height:54vh;overflow-y:auto;padding-right:2px;}
+.sd-card{background:#181c24;border:1px solid #334155;border-radius:12px;padding:12px;}
+.sd-data-line{font-family:monospace;font-size:12.5px;line-height:1.55;color:#e2e8f0;word-break:break-all;margin-bottom:10px;}
+.sd-idx{color:#60a5fa;font-weight:900;}
+.sd-btns{display:flex;justify-content:flex-end;gap:7px;flex-wrap:wrap;}
+.sd-btn{border:none;border-radius:7px;padding:6px 11px;font-size:12px;font-weight:800;color:#fff;cursor:pointer;display:inline-flex;align-items:center;gap:4px;}
+.sd-btn:active{transform:scale(.95);}
+.sd-btn-login{background:#22c55e;color:#052e16;}
+.sd-btn-copy{background:#2563eb;}
+.sd-btn-del{background:#dc2626;}
+
+.rm-badge{position:absolute;right:48px;top:14px;background:#0c2d48;border:1px solid #0284c7;color:#38bdf8;font-size:12px;font-weight:800;padding:3px 10px;border-radius:20px;}
+.rm-selected-banner{background:#092918;border:1px solid #16a34a;color:#4ade80;padding:8px 12px;border-radius:9px;font-size:13px;font-weight:800;margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+.rm-sub-bar{background:#1d2536;border:1px solid #2e3b55;color:#93c5fd;text-align:center;padding:7px;border-radius:8px;font-size:12px;font-weight:900;letter-spacing:1.2px;margin:8px 0 10px 0;}
+.rm-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:2px 0 6px;max-height:54vh;overflow-y:auto;}
+.rm-card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:11px 4px;border:1px solid #2e3646;border-radius:11px;background:#1b202b;cursor:pointer;color:#e5e7eb;transition:transform .08s;text-align:center;min-width:0;}
+.rm-card:active{background:#243044;border-color:#60a5fa;transform:scale(.96)}
+.rm-card.selected{border-color:#22c55e;background:#0f2a1c;border-width:2px;}
+.rm-flag{font-size:22px;line-height:1;}
+.rm-code{font-size:12.5px;font-weight:900;color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+.rm-country{font-size:11px;color:#94a3b8;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;line-height:1.1;}
+
+.sm-list{display:flex;flex-direction:column;gap:8px;margin-top:6px;}
+.sm-option{display:flex;align-items:center;gap:10px;padding:12px 10px;border:2px solid #334155;border-radius:10px;background:#1a1e26;cursor:pointer;}
+.sm-option.selected{border-color:#22c55e;background:#0f2a1c;}
+.sm-icon{font-size:24px;flex:0 0 auto;}
+.sm-body{flex:1;min-width:0;}
+.sm-title{font-size:13.5px;font-weight:900;color:#e5e7eb;margin-bottom:2px;}
+.sm-desc{font-size:11.5px;color:#94a3b8;}
+.sm-check{font-size:20px;color:#22c55e;font-weight:900;}
+
+.otp-hist-item{background:#1a1f29;border:1px solid #334155;border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.otp-hist-code{font-size:17px;font-weight:900;color:#4ade80;letter-spacing:1px;}
+.otp-hist-meta{font-size:11.5px;color:#94a3b8;margin-top:2px;}
+
+.ua-list { display: flex; flex-direction: column; gap: 6px; padding: 10px; }
+.ua-option { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #1e2025; border: 1px solid #334155; border-radius: 8px; cursor: pointer; color: #e2e8f0; font-size: 14px; transition: background 0.1s; }
+.ua-option:active { background: #2a2e35; }
+.ua-option.active { border-color: #3b82f6; background: #1e3a8a; }
+.ua-radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #64748b; display: flex; align-items: center; justify-content: center; }
+.ua-option.active .ua-radio { border-color: #60a5fa; }
+.ua-option.active .ua-radio::after { content: ''; width: 10px; height: 10px; border-radius: 50%; background: #60a5fa; }
+
+.toast{position:fixed;left:50%;top:44px;transform:translate(-50%,-6px);z-index:2147483647;background:#f2f4f7;color:#172033;padding:5px 14px;border-radius:14px;font-size:11.5px;font-weight:800;opacity:0;pointer-events:none;transition:.14s ease;box-shadow:0 3px 10px rgba(0,0,0,.45);white-space:nowrap;max-width:85vw;overflow:hidden;text-overflow:ellipsis;border:1.5px solid #2563eb;}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.warn{background:#fef3c7;border-color:#f59e0b;color:#78350f}
+.toast.ok{background:#dcfce7;border-color:#16a34a;color:#14532d}
+.toast.err{background:#fee2e2;border-color:#ef4444;color:#7f1d1d}
+
+#bootSplash{position:fixed;inset:0;z-index:2147483647;background:#121212;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;}
+#bootSplash .boot-spin{width:44px;height:44px;border:3px solid #222;border-top-color:#60a5fa;border-radius:50%;animation:bootspin 0.8s linear infinite;}
+#bootSplash .boot-text{color:#555;font-size:12px;font-weight:600;letter-spacing:2px;}
+@keyframes bootspin{to{transform:rotate(360deg)}}
+#bootSplash.hide{opacity:0;pointer-events:none;transition:opacity 0.2s ease;}
+</style>
+</head>
+<body>
+
+<div id="bootSplash">
+  <div class="boot-spin"></div>
+  <div class="boot-text">LOADING</div>
+</div>
+
+<div class="app" id="mainApp">
+  <div class="brandbar">
+    <span class="tp-brand-text">TrustPoint BD</span>
+    <div class="brandbar-icons">
+        <span id="themeToggleBtn">☀️</span>
+    </div>
+    <span class="brandbar-right tp-creator-text"></span>
+  </div>
+
+  <nav class="top-grid">
+    <button class="tab top1" id="rangeBtn" type="button" style="grid-row: 1; grid-column: 1;">📡 Range</button>
+    <button class="tab top2" id="refreshBtn" type="button" style="grid-row: 1; grid-column: 2;">🔄 Refresh</button>
+    <button class="tab top3" id="menuBtn" type="button" style="grid-row: 1; grid-column: 3;">⚙️ Menu</button>
+    <button class="tab top4" id="pageBtn" type="button" style="grid-row: 1; grid-column: 4;">🌐 Proxy ON</button>
+
+    <button class="tab top5" id="addMailBtn" type="button" style="grid-row: 2; grid-column: 1;">📥 Get mail</button>
+    <button class="tab top6" id="getMailBtn" type="button" style="grid-row: 2; grid-column: 2;">🌐 Get Meta</button>
+    <button class="tab top7" id="homeBtn" type="button" style="grid-row: 2; grid-column: 3;">🏠 Home</button>
+    <button class="tab" id="downloadRangeBtn" type="button" style="grid-row: 2; grid-column: 4; font-size:11px; background:linear-gradient(180deg,#0f766e,#115e59); border-color:#2dd4bf; box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 3px 0 #042f2e;">⬇️ Download</button>
+
+    <button class="tab" id="clearWebTopBtn" type="button" style="grid-row: 3; grid-column: 1; font-size:11px; background:linear-gradient(180deg,#b91c1c,#7f1d1d); border-color:#f87171; box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 3px 0 #450a0a;">Clear Web</button>
+    <button class="tab" id="saveRangeBtn" type="button" style="grid-row: 3; grid-column: 2; font-size:11px; background:linear-gradient(180deg,#15803d,#166534); border-color:#4ade80; box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 3px 0 #052e16;">SAVE</button>
+    <button class="tab" id="viewRangeBtn" type="button" style="grid-row: 3; grid-column: 3; font-size:11px; background:linear-gradient(180deg,#1d4ed8,#1e40af); border-color:#60a5fa; box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 3px 0 #172554;">VIEW</button>
+
+    <button class="top8" id="createFbBtn" type="button" style="grid-row: 3 / span 2; grid-column: 4; width:100%; height:calc(100% - 13px); margin-top:13px; border-radius:7px; font-size:12px; font-weight:900; letter-spacing:.6px; padding:0 6px 3px 0; color:#fff; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-shadow:0 1px 3px rgba(0,0,0,.8); border-width:2px; border-style:solid; display:flex; align-items:center; justify-content:center; gap:2px; background: linear-gradient(135deg, #8b5cf6, #3b82f6, #10b981); border-color: #a78bfa; box-shadow: inset 0 2px 0 rgba(255,255,255,.3), 0 4px 0 #4c1d95, 0 5px 12px rgba(139,92,246,.5);">✨ Create IG</button>
+
+    <input id="manualRangeInput" value="" placeholder="Range বাটন চাপুন" inputmode="numeric" style="grid-row: 4; grid-column: 1 / 3; width:100%; height:38px; border:1px solid #596575; border-radius:7px; padding:0 11px; font-size:14px; font-weight:600; background:#1b2027; color:#a5f3fc; outline:none; letter-spacing:.4px;">
+    <button id="manualGetBtn" type="button" style="grid-row: 4; grid-column: 3; width:100%; height:38px; padding:0 3px; border-radius:7px; font-size:12px; font-weight:800; color:#fff; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:.3px; background:linear-gradient(180deg,#0369a1,#075985); border:2px solid #38bdf8; text-shadow:0 1px 2px rgba(0,0,0,.6); box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 3px 0 #082f49;">GET NUM</button>
+  </nav>
+
+  <main class="content">
+    <div class="status" style="margin-top: 2px;">
+      <div class="status-info">
+        <div class="line" id="dispCountry">Country: -</div>
+        <div class="line" id="dispNumber" onclick="copyCurrentNumber()">Number: -</div>
+      </div>
+      <div class="status-side">
+        <div class="otp" id="dispOtp" onclick="copyCurrentOtp()">OTP</div>
+      </div>
+    </div>
+
+    <div class="web-area" id="webArea">
+      <div class="web-loader hide" id="webLoader">
+        <div class="spin"></div>
+        <div id="webLoaderText">Loading page…</div>
+      </div>
+      <iframe id="mainFrame" title="TrustPoint Web"
+        allow="clipboard-read; clipboard-write; geolocation; autoplay"
+        referrerpolicy="no-referrer-when-downgrade"
+        sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation allow-top-navigation-by-user-activation allow-modals allow-downloads allow-storage-access-by-user-activation"></iframe>
+    </div>
+
+    <footer class="bottom" id="bottomBar">
+      <button class="bottom1" id="usernameBtn" type="button">👤 Username</button>
+      <button class="bottom2" id="cookiesBtn" type="button">🍪 Cookies</button>
+      <button class="bottom3" id="twofaBtn" type="button">🔐 2FA</button>
+      <button class="bottom4" id="twofaCNBtn" type="button">🔢 2FA CN</button>
+    </footer>
+  </main>
+</div>
+
+<div class="tg-sheet-backdrop" id="tgSheetBackdrop">
+  <div class="tg-sheet-panel" id="tgSheetPanel">
+    <div class="tg-sheet-header">
+      <div class="tg-sheet-title">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+        </svg>
+        <span id="tgPanelTitleText">Telegram Login</span>
+      </div>
+      <div class="tg-sheet-actions">
+        <button type="button" class="tg-pill-btn active-on" id="tgPanelPowerBtn">ON</button>
+        <button type="button" class="tg-pill-btn" id="tgPanelLockBtn">🔒 Lock</button>
+        <button type="button" class="tg-pill-btn" id="tgPanelVerBtn">A/K</button>
+        <button type="button" class="tg-pill-btn" id="tgPanelReloadBtn">🔄</button>
+        <button type="button" class="tg-sheet-close" id="tgPanelCloseBtn" title="Close">✕</button>
+      </div>
+    </div>
+
+    <div class="tg-2fa-bar">
+      <input type="text" class="tg-2fa-input" id="tgPanel2faInput" placeholder="2FA Key / Code লিখুন..." autocomplete="off" spellcheck="false">
+      <button type="button" class="tg-2fa-btn gen" id="tgPanelGen2faBtn">🔢 Code</button>
+      <button type="button" class="tg-2fa-btn" id="tgPanelSubmit2faBtn">Submit 2FA</button>
+    </div>
+
+    <div class="tg-sheet-body">
+      <iframe id="tgLoginFrame" class="tg-web-frame" title="Telegram Web Login"
+        allow="clipboard-read; clipboard-write; geolocation; autoplay"
+        referrerpolicy="no-referrer-when-downgrade"
+        sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation allow-top-navigation-by-user-activation allow-modals allow-downloads allow-storage-access-by-user-activation"></iframe>
+      <div class="tg-off-notice" id="tgOffNotice">
+        <div style="font-size:15px;font-weight:900;color:#fca5a5;">Telegram সিস্টেম OFF আছে</div>
+        <div>Telegram Login পেজ চালু করতে <b>ON</b> বাটনে চাপুন।</div>
+        <button type="button" class="tg-2fa-btn gen" id="tgNoticeTurnOnBtn">Telegram ON করুন</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="uaModalBackdrop">
+  <div class="mini-modal" style="width: 90%; max-width: 400px; background: #1e2025; border-radius: 12px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; border-bottom: 1px solid #333;">
+      <h3 style="margin: 0; font-size: 16px; color: #fff;">User-agent</h3>
+      <button class="modal-close" id="uaModalCloseBtn" type="button" style="position: static;">×</button>
+    </div>
+    <div class="ua-list" id="uaList"></div>
+    <div style="padding: 12px; border-top: 1px solid #333;">
+      <button class="modal-primary" id="uaModalDoneBtn" type="button" style="width: 100%; padding: 12px; border-radius: 8px; font-weight: bold; border: none; color:#fff;">Close</button>
+    </div>
+  </div>
+</div>
+
+<input type="hidden" id="webUid" value="">
+<input type="hidden" id="webPass" value="">
+<input type="hidden" id="webCookies" value="">
+<input type="hidden" id="webHotmail" value="">
+<input type="hidden" id="web2FA" value="">
+<input type="hidden" id="webUsername" value="">
+
+<div class="overlay" id="overlay"></div>
+<aside class="drawer" id="drawer">
+  <button class="close" id="closeBtn" type="button">×</button>
+  <div class="drawer-brand tp-brand-text">TrustPoint BD</div>
+  <div class="drawer-subtitle">Creator <span class="tp-creator-text"></span></div>
+  <div class="drawer-title" style="margin-top:10px; color:#9ec5ff; font-size:12px; font-weight:800; letter-spacing:2px;">SETTINGS</div>
+
+  <div class="menu-settings">
+    <button type="button" id="desktopBtn">🖥️ Desktop</button>
+    <button type="button" id="passwordBtn">🔑 Password</button>
+    <button type="button" id="customNameBtn">📝 Name</button>
+    <button type="button" id="proxyBtn">🌐 Proxy Set</button>
+    <button type="button" id="autoNumberBtn">🔢 Auto Num: OFF</button>
+    <button type="button" id="otpHistoryBtn">📜 OTP History</button>
+    <button type="button" id="mailModBtn">📧 MAIL MOD</button>
+    <button type="button" id="clearSheetBtn">🧹 Clear Sheet</button>
+    <button type="button" id="sheetModeBtn">📄 Sheet 1</button>
+    <button type="button" id="liveCheckerBtn">📡 Live ckr</button>
+    <button type="button" class="admin-btn" id="sheetRecoveryBtn">♻️ Recovery</button>
+    <button type="button" class="meta-toggle-btn" id="metaToggleBtn">Meta: OFF</button>
+    <button type="button" class="set-meta-btn" id="setMetaBtn">⚙️ Set Meta</button>
+    <button type="button" class="join-channel-btn" id="joinTelegramBtn">✈️ Join Telegram Channel</button>
+  </div>
+
+  <div style="margin-top:24px; padding-top:12px; border-top:1px solid #333; text-align:center; color:#7b8494; font-size:11px; line-height:1.7;">
+    <div style="font-weight:bold; color:#9ec5ff;">Version: <span id="appVersion">1.2.0</span></div>
+    <div>Last Update: <span id="lastUpdate">25 Oct 2026</span></div>
+  </div>
+</aside>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="mini-modal" id="miniModal">
+    <button class="modal-close" id="modalClose" type="button">×</button>
+    <span class="rm-badge" id="modalBadge" style="display:none;"></span>
+    <h3 id="modalTitle"></h3>
+    <div id="modalBody"></div>
+    <div class="modal-actions" id="modalActions"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  window.TP = window.TP || {};
+
+  function safeJsonParse(raw, fallback) {
+    try {
+      if (!raw || typeof raw !== "string") return fallback;
+      var t = raw.trim();
+      if (!t) return fallback;
+      return JSON.parse(t);
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  function cleanupRemovedFloatingButtons() {
+    try {
+      var strayIds = ["__ir_copy_user_btn", "tgFixedFab", "tgSecondFab", "telegramFab2", "tgFloatingBtn2"];
+      strayIds.forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+      });
+      document.querySelectorAll("[data-tg-fab='true'], .tg-fixed-fab, .tg-extra-fab, .tg-second-fab").forEach(function (el) {
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+      });
+    } catch (e) {}
+  }
+  cleanupRemovedFloatingButtons();
+
+  window.hideBootSplash = function () {
+    try {
+      var s = document.getElementById("bootSplash");
+      if (!s) return;
+      s.classList.add("hide");
+      setTimeout(function () { try { s.remove(); } catch (e) { s.style.display = "none"; } }, 220);
+    } catch (e) {}
+  };
+  setTimeout(function () { try { window.hideBootSplash(); } catch (e) {} }, 4000);
+
+  var buildTime = new Date();
+  try {
+    document.getElementById("lastUpdate").textContent = buildTime.toLocaleDateString() + " " + buildTime.toLocaleTimeString();
+    document.getElementById("appVersion").textContent = "1.2." + Math.floor(buildTime.getTime() / 1000000000);
+  } catch (e) {}
+
+  var creatorName = "『Raj』Chowdhury☬";
+  document.addEventListener("DOMContentLoaded", function () {
+    cleanupRemovedFloatingButtons();
+    document.querySelectorAll(".tp-creator-text").forEach(function (el) { el.textContent = creatorName; });
+  });
+
+  var Bridge = {
+    has: function () {
+      try {
+        return (typeof window.Android !== "undefined" && window.Android !== null) ||
+               (typeof window.SheetAPI !== "undefined" && window.SheetAPI !== null);
+      } catch (e) { return false; }
+    },
+    call: function (name) {
+      var args = Array.prototype.slice.call(arguments, 1);
+      try {
+        if (typeof window.SheetAPI !== "undefined" && window.SheetAPI && typeof window.SheetAPI[name] === "function") {
+          return window.SheetAPI[name].apply(window.SheetAPI, args);
+        }
+      } catch (e) {}
+      try {
+        if (typeof window.Android !== "undefined" && window.Android && typeof window.Android[name] === "function") {
+          return window.Android[name].apply(window.Android, args);
+        }
+      } catch (e) {}
+      return null;
+    }
+  };
+
+  function getSheetBridge() {
+    try { if (typeof window.SheetAPI !== "undefined" && window.SheetAPI !== null) return window.SheetAPI; } catch (e) {}
+    try { if (typeof window.Android !== "undefined" && window.Android !== null) return window.Android; } catch (e) {}
+    return null;
+  }
+
+  var HOME_URL = "https://www.instagram.com/accounts/login/?mtn";
+  var LOGIN_URL = "https://www.instagram.com/accounts/login/?mtn";
+  var TWOFA_URL = "https://accountscenter.instagram.com/password_and_security/two_factor/?theme=dark";
+  var $ = function (id) { return document.getElementById(id); };
+  var drawer = $("drawer"), overlay = $("overlay");
+  var modalBackdrop = $("modalBackdrop"), uaModalBackdrop = $("uaModalBackdrop"), miniModal = $("miniModal"),
+      modalTitle = $("modalTitle"), modalBody = $("modalBody"),
+      modalActions = $("modalActions"), modalBadge = $("modalBadge"), toastEl = $("toast");
+  var mainFrame = $("mainFrame"), webArea = $("webArea"), bottomBar = $("bottomBar");
+  var dispCountry = $("dispCountry"), dispNumber = $("dispNumber"), dispOtp = $("dispOtp");
+  var hUid = $("webUid"), hPass = $("webPass"), hCookies = $("webCookies"), hMail = $("webHotmail"), h2FA = $("web2FA"), hUsername = $("webUsername");
+
+  var currentNumber = "", currentCountry = "", currentUrl = HOME_URL, lastSavedPassword = "";
+
+  function isLikelyPhoneOrAccountToken(tok) {
+    if (!tok) return false;
+    var t = tok.trim();
+    if (t.charAt(0) === "+") return true;
+    var digits = t.replace(/[^0-9]/g, "");
+    if (digits.length >= 8 && /^[+0-9()\-]+$/.test(t)) return true;
+    if (t.indexOf("@") > 0) return true;
+    return false;
+  }
+
+  function parseMetaLineSmart(rawLine, statusMap) {
+    var trimmed = (rawLine || "").trim();
+    if (!trimmed) return null;
+
+    var tokens = trimmed.split(/[|,:;\t\s]+/).map(function (t) { return t.trim(); }).filter(Boolean);
+    if (tokens.length < 2) return null;
+
+    var phoneIdx = tokens.findIndex(isLikelyPhoneOrAccountToken);
+    var phone = "";
+    var password = "";
+    var twofa = "";
+
+    if (phoneIdx === 0) {
+      phone = tokens[0];
+      password = tokens[1] || "";
+      twofa = tokens.slice(2).join("");
+    } else if (phoneIdx > 0) {
+      password = tokens.slice(0, phoneIdx).join(" ");
+      phone = tokens[phoneIdx];
+      twofa = tokens.slice(phoneIdx + 1).join("");
+    } else {
+      password = tokens[0];
+      phone = tokens[1];
+      twofa = tokens.slice(2).join("");
+    }
+
+    if (!phone || !password) return null;
+
+    return {
+      phone: phone,
+      password: password,
+      twofa: twofa,
+      status: (statusMap && statusMap[phone]) ? statusMap[phone] : "fresh",
+      addedAt: Date.now()
+    };
+  }
+
+  function formatMetaLineDisplay(m) {
+    var pass = m.password || "";
+    var phone = m.phone || "";
+    var twofa = m.twofa || "";
+    return [pass, phone, twofa].filter(Boolean).join(" ");
+  }
+
+  function getStoredMetaPool() {
+    var nativeList = [];
+    try {
+      var raw = Bridge.call("getMetaListNative") || Bridge.call("getMetaList");
+      var parsedNative = safeJsonParse(raw, []);
+      if (Array.isArray(parsedNative)) nativeList = parsedNative;
+    } catch (e) {}
+
+    var localList = safeJsonParse(localStorage.getItem("tp_meta_pool"), []);
+    var source = (Array.isArray(nativeList) && nativeList.length > 0) ? nativeList : (Array.isArray(localList) ? localList : []);
+
+    return source.map(function (m) {
+      if (!m) return null;
+      if (m.phone && m.password) {
+        return {
+          phone: String(m.phone).trim(),
+          password: String(m.password).trim(),
+          twofa: String(m.twofa || "").trim(),
+          status: m.status || "fresh",
+          addedAt: m.addedAt || Date.now()
+        };
+      }
+      var combined = [m.phone || "", m.password || "", m.twofa || ""].join(" ");
+      return parseMetaLineSmart(combined, null);
+    }).filter(Boolean);
+  }
+
+  function saveStoredMetaPool(poolList) {
+    var clean = Array.isArray(poolList) ? poolList : [];
+    try { localStorage.setItem("tp_meta_pool", JSON.stringify(clean)); } catch (e) {}
+    try { Bridge.call("saveMetaPoolJsonNative", JSON.stringify(clean)); } catch (e) {}
+  }
+
+  function applyActiveMetaToState(acc) {
+    if (!acc) return;
+    var phone = (acc.phone || "").trim();
+    var pass = (acc.password || "").trim();
+    var twofa = (acc.twofa || "").trim();
+
+    if (phone) {
+      currentNumber = phone;
+      if (dispNumber) dispNumber.textContent = "Number: " + phone;
+      try { localStorage.setItem("tp_active_meta_phone", phone); } catch (e) {}
+    }
+    if (pass) {
+      lastSavedPassword = pass;
+      try {
+        localStorage.setItem("tp_password", pass);
+        localStorage.setItem("tp_active_meta_pass", pass);
+      } catch (e) {}
+      if (hPass) hPass.value = pass;
+      try { Bridge.call("savePassword", pass); } catch (e) {}
+    }
+    if (twofa) {
+      try {
+        localStorage.setItem("tp_last_2fa_key", twofa);
+        localStorage.setItem("tp_active_meta_2fa", twofa);
+      } catch (e) {}
+      if (h2FA) h2FA.value = twofa;
+      try { Bridge.call("set2FAKey", twofa); } catch (e) {}
+    }
+  }
+
+  function consumeNextFreshMetaAccount() {
+    var pool = getStoredMetaPool();
+    var idx = pool.findIndex(function (m) { return (m.status || "fresh") === "fresh"; });
+
+    if (idx !== -1) {
+      var chosen = pool[idx];
+      pool[idx].status = "used";
+      saveStoredMetaPool(pool);
+      try { Bridge.call("markMetaUsedNative", chosen.phone); } catch (e) {}
+      applyActiveMetaToState(chosen);
+      return chosen;
+    }
+
+    try {
+      var rawFresh = Bridge.call("getMeta");
+      var obj = safeJsonParse(rawFresh, null);
+      if (obj && obj.phone && obj.password) {
+        applyActiveMetaToState(obj);
+        return obj;
+      }
+    } catch (e) {}
+
+    return null;
+  }
+
+  /* TELEGRAM OVERLAY */
+  var telegramTaskEnabled = localStorage.getItem("tp_tg_task_enabled") !== "false";
+  var telegramSheetLocked = localStorage.getItem("tp_tg_sheet_locked") === "true";
+  var TG_WEB_K = "https://web.telegram.org/k/";
+  var TG_WEB_A = "https://web.telegram.org/a/";
+  var activeTgUrl = localStorage.getItem("tp_tg_web_url") || TG_WEB_K;
+
+  function updateTelegramVerLabel() {
+    var titleEl = $("tgPanelTitleText");
+    var verBtn = $("tgPanelVerBtn");
+    var isK = (activeTgUrl || "").indexOf("/k/") !== -1;
+    if (titleEl) titleEl.textContent = isK ? "Telegram Login (K)" : "Telegram Login (A)";
+    if (verBtn) verBtn.textContent = isK ? "K / A" : "A / K";
+  }
+
+  function loadTelegramLoginFrame(targetUrl) {
+    var tgFrame = $("tgLoginFrame");
+    if (!tgFrame) return;
+    var urlToLoad = targetUrl || activeTgUrl || TG_WEB_K;
+    activeTgUrl = urlToLoad;
+    try { localStorage.setItem("tp_tg_web_url", activeTgUrl); } catch (e) {}
+    updateTelegramVerLabel();
+
+    try { Bridge.call("setTelegramWebUrl", urlToLoad); } catch (e) {}
+    try { Bridge.call("loadTelegramPopupUrl", urlToLoad); } catch (e) {}
+    try { tgFrame.setAttribute("src", urlToLoad); } catch (e) {}
+  }
+
+  function syncTelegramPowerState(enabled) {
+    telegramTaskEnabled = !!enabled;
+    try { localStorage.setItem("tp_tg_task_enabled", String(telegramTaskEnabled)); } catch (e) {}
+
+    var panelPowerBtn = $("tgPanelPowerBtn");
+    var offNotice = $("tgOffNotice");
+    var tgFrame = $("tgLoginFrame");
+
+    if (panelPowerBtn) {
+      panelPowerBtn.textContent = telegramTaskEnabled ? "ON" : "OFF";
+      panelPowerBtn.classList.toggle("active-on", telegramTaskEnabled);
+      panelPowerBtn.classList.toggle("active-off", !telegramTaskEnabled);
+    }
+    if (offNotice) offNotice.classList.toggle("show", !telegramTaskEnabled);
+    if (tgFrame) {
+      if (telegramTaskEnabled) {
+        var curSrc = tgFrame.getAttribute("src") || "";
+        if (!curSrc || curSrc === "about:blank") loadTelegramLoginFrame(activeTgUrl);
+      } else {
+        try { tgFrame.setAttribute("src", "about:blank"); } catch (e) {}
+      }
+    }
+
+    cleanupRemovedFloatingButtons();
+    try { Bridge.call("setTelegramTaskEnabled", telegramTaskEnabled); } catch (e) {}
+  }
+
+  function syncTelegramSheetLock(locked) {
+    telegramSheetLocked = !!locked;
+    try { localStorage.setItem("tp_tg_sheet_locked", String(telegramSheetLocked)); } catch (e) {}
+    var backdrop = $("tgSheetBackdrop");
+    var lockBtn = $("tgPanelLockBtn");
+    if (backdrop) backdrop.classList.toggle("locked", telegramSheetLocked);
+    if (lockBtn) {
+      lockBtn.textContent = telegramSheetLocked ? "🔓 Unlock" : "🔒 Lock";
+      lockBtn.classList.toggle("locked-on", telegramSheetLocked);
+    }
+    try { Bridge.call("setTelegramLocked", telegramSheetLocked); } catch (e) {}
+  }
+
+  function restoreInstagramWithoutRefresh() {
+    try { Bridge.call("setActivePage", "insta"); } catch (e) {}
+    try { Bridge.call("setUiOverlay", false); } catch (e) {}
+    try { Bridge.call("showNativeWeb"); } catch (e) {}
+    setTimeout(function () {
+      applyOverlayLockState();
+      syncWebAreaBounds();
+      cleanupRemovedFloatingButtons();
+    }, 60);
+  }
+
+  function openTelegramSheetPanel() {
+    var backdrop = $("tgSheetBackdrop");
+    var tgFrame = $("tgLoginFrame");
+    var input2fa = $("tgPanel2faInput");
+
+    if (input2fa && !input2fa.value.trim()) {
+      input2fa.value = localStorage.getItem("tp_last_2fa_key") || (h2FA ? h2FA.value : "") || "";
+    }
+
+    updateTelegramVerLabel();
+    if (backdrop) {
+      backdrop.classList.add("open");
+      backdrop.style.display = "flex";
+    }
+    syncTelegramSheetLock(telegramSheetLocked);
+    syncTelegramPowerState(telegramTaskEnabled);
+
+    if (telegramTaskEnabled && tgFrame) {
+      var curSrc = tgFrame.getAttribute("src") || "";
+      if (!curSrc || curSrc === "about:blank") loadTelegramLoginFrame(activeTgUrl);
+    }
+
+    lockWebBehindOverlay("tgSheet");
+    try {
+      if (telegramTaskEnabled) Bridge.call("onTelegramTaskTriggered", activeTgUrl);
+    } catch (e) {}
+    cleanupRemovedFloatingButtons();
+  }
+
+  function closeTelegramSheetPanel() {
+    var backdrop = $("tgSheetBackdrop");
+    var tgFrame = $("tgLoginFrame");
+
+    if (backdrop) {
+      backdrop.classList.remove("open");
+      backdrop.style.display = "none";
+    }
+
+    if (!telegramSheetLocked && tgFrame) {
+      try { tgFrame.setAttribute("src", "about:blank"); } catch (e) {}
+    }
+
+    try { Bridge.call("hideTelegramPopupIfClosed"); } catch (e) {}
+
+    delete activeOverlayTokens["tgSheet"];
+    restoreInstagramWithoutRefresh();
+  }
+
+  window.TP.onBackPressedFromNative = function () {
+    var backdrop = $("tgSheetBackdrop");
+    var tgOpen = !!(backdrop && backdrop.classList.contains("open"));
+    if (tgOpen) {
+      if (telegramSheetLocked) {
+        showToast("🔒 Telegram লক করা আছে", "warn");
+        return true;
+      }
+      closeTelegramSheetPanel();
+      return true;
+    }
+    return false;
+  };
+
+  (function initTelegramControls() {
+    var powerBtn = $("tgPanelPowerBtn");
+    var lockBtn = $("tgPanelLockBtn");
+    var verBtn = $("tgPanelVerBtn");
+    var reloadBtn = $("tgPanelReloadBtn");
+    var closeBtn = $("tgPanelCloseBtn");
+    var backdrop = $("tgSheetBackdrop");
+    var noticeTurnOnBtn = $("tgNoticeTurnOnBtn");
+    var gen2faBtn = $("tgPanelGen2faBtn");
+    var submit2faBtn = $("tgPanelSubmit2faBtn");
+
+    updateTelegramVerLabel();
+
+    if (powerBtn) {
+      powerBtn.onclick = function () {
+        var nextState = !telegramTaskEnabled;
+        syncTelegramPowerState(nextState);
+        showToast(nextState ? "✈️ Telegram ON" : "⛔ Telegram OFF", nextState ? "ok" : "warn");
+      };
+    }
+    if (noticeTurnOnBtn) {
+      noticeTurnOnBtn.onclick = function () {
+        syncTelegramPowerState(true);
+        loadTelegramLoginFrame(activeTgUrl);
+        showToast("✈️ Telegram ON", "ok");
+      };
+    }
+    if (lockBtn) {
+      lockBtn.onclick = function () {
+        syncTelegramSheetLock(!telegramSheetLocked);
+        showToast(telegramSheetLocked ? "🔒 Telegram Locked" : "🔓 Telegram Unlocked", "ok");
+      };
+    }
+    if (verBtn) {
+      verBtn.onclick = function () {
+        if (!telegramTaskEnabled) { showToast("আগে Telegram ON করুন", "warn"); return; }
+        activeTgUrl = (activeTgUrl.indexOf("/k/") !== -1) ? TG_WEB_A : TG_WEB_K;
+        try { localStorage.setItem("tp_tg_web_url", activeTgUrl); } catch (e) {}
+        updateTelegramVerLabel();
+        loadTelegramLoginFrame(activeTgUrl);
+      };
+    }
+    if (reloadBtn) {
+      reloadBtn.onclick = function () {
+        if (!telegramTaskEnabled) { showToast("আগে Telegram ON করুন", "warn"); return; }
+        loadTelegramLoginFrame(activeTgUrl);
+      };
+    }
+    if (closeBtn) {
+      closeBtn.onclick = function (e) {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        closeTelegramSheetPanel();
+      };
+    }
+    if (backdrop) {
+      backdrop.addEventListener("click", function (e) {
+        if (e.target === backdrop) {
+          if (telegramSheetLocked) { showToast("🔒 Telegram লক করা আছে", "warn"); return; }
+          closeTelegramSheetPanel();
+        }
+      });
+    }
+    if (gen2faBtn) {
+      gen2faBtn.onclick = function () {
+        var inp = $("tgPanel2faInput");
+        var raw = inp ? inp.value.trim() : "";
+        if (!raw) { showToast("2FA Key লিখুন বা পেস্ট করুন", "warn"); return; }
+        processTwoFactorKey(raw, "Telegram 2FA");
+        try { localStorage.setItem("tp_last_2fa_key", raw); } catch (e) {}
+      };
+    }
+    if (submit2faBtn) {
+      submit2faBtn.onclick = function () {
+        if (!telegramTaskEnabled) { showToast("Telegram OFF থাকায় 2FA সাবমিট বন্ধ", "warn"); return; }
+        var inp = $("tgPanel2faInput");
+        var raw = inp ? inp.value.trim() : "";
+        if (!raw) { showToast("2FA Key বা Code লিখুন", "warn"); return; }
+        var codeToSubmit = /^\d{6}$/.test(raw) ? raw : generateTotpFromSecret(raw, 30, 6);
+        if (!codeToSubmit) { showToast("সঠিক 2FA Key বা ৬ ডিজিট কোড দিন", "err"); return; }
+        if (h2FA) h2FA.value = raw;
+        try { localStorage.setItem("tp_last_2fa_key", raw); } catch (e) {}
+        copyText(codeToSubmit, "2FA Code: " + codeToSubmit);
+        try { Bridge.call("submitTelegram2FA", raw, codeToSubmit); } catch (e) {}
+        var tgFrame = $("tgLoginFrame");
+        try {
+          if (tgFrame && tgFrame.contentWindow) {
+            tgFrame.contentWindow.postMessage({ type: "TP_SUBMIT_2FA", key: raw, code: codeToSubmit }, "*");
+          }
+        } catch (e) {}
+        showToast("✓ 2FA সাবমিট পাঠানো হয়েছে: " + codeToSubmit, "ok");
+      };
+    }
+
+    syncTelegramPowerState(telegramTaskEnabled);
+    syncTelegramSheetLock(telegramSheetLocked);
+    cleanupRemovedFloatingButtons();
+    setInterval(cleanupRemovedFloatingButtons, 1500);
+  })();
+
+  window.TP.openTelegramPopup = openTelegramSheetPanel;
+  window.TP.closeTelegramPopup = closeTelegramSheetPanel;
+  window.TP.enforceTgButtonVisible = cleanupRemovedFloatingButtons;
+  window.TP.isTelegramEnabled = function () { return telegramTaskEnabled; };
+  window.TP.setTelegramEnabled = function (v) { syncTelegramPowerState(!!v); };
+  window.TP.isTelegramLocked = function () { return telegramSheetLocked; };
+  window.TP.setTelegramLock = function (v) { syncTelegramSheetLock(!!v); };
+
+  var activeOverlayTokens = {};
+  var overlayReleaseTimer = null;
+
+  function isAnyOverlayVisible() {
+    if (Object.keys(activeOverlayTokens).length > 0) return true;
+    if (drawer && drawer.classList.contains("open") && !drawer.classList.contains("closing")) return true;
+    if (modalBackdrop && modalBackdrop.classList.contains("open")) return true;
+    if (uaModalBackdrop && uaModalBackdrop.classList.contains("open")) return true;
+    if ($("tgSheetBackdrop") && $("tgSheetBackdrop").classList.contains("open")) return true;
+    return false;
+  }
+
+  function applyOverlayLockState() {
+    if (overlayReleaseTimer) {
+      clearTimeout(overlayReleaseTimer);
+      overlayReleaseTimer = null;
+    }
+    var locked = isAnyOverlayVisible();
+    window.__tpOverlayActive = locked;
+    if (locked) {
+      document.body.classList.add("drawer-open");
+      Bridge.call("setUiOverlay", true);
+      Bridge.call("hideNativeWeb");
+    } else {
+      document.body.classList.remove("drawer-open");
+      Bridge.call("setUiOverlay", false);
+      Bridge.call("showNativeWeb");
+      setTimeout(syncWebAreaBounds, 60);
+    }
+    cleanupRemovedFloatingButtons();
+  }
+
+  function lockWebBehindOverlay(token) {
+    activeOverlayTokens[token || "default"] = true;
+    applyOverlayLockState();
+  }
+
+  function unlockWebOverlay(token, delayMs) {
+    if (token) delete activeOverlayTokens[token];
+    else activeOverlayTokens = {};
+    if (overlayReleaseTimer) clearTimeout(overlayReleaseTimer);
+    overlayReleaseTimer = setTimeout(function () {
+      applyOverlayLockState();
+    }, delayMs || 180);
+  }
+
+  function computeCurrentBounds() {
+    if (!webArea) return null;
+    try {
+      var rect = webArea.getBoundingClientRect();
+      var vh = Math.max(1, document.documentElement.clientHeight || window.innerHeight || 1);
+      var vw = Math.max(1, document.documentElement.clientWidth || window.innerWidth || 1);
+
+      var footerTop = vh;
+      if (bottomBar) {
+        var fRect = bottomBar.getBoundingClientRect();
+        if (fRect.top > 0) footerTop = Math.min(footerTop, fRect.top - 2);
+      }
+
+      var safeBottom = Math.min(rect.bottom, footerTop);
+      var actualHeight = Math.max(10, safeBottom - rect.top);
+
+      var left = Math.max(0, rect.left) / vw;
+      var top = Math.max(0, rect.top) / vh;
+      var width = Math.min(1 - left, Math.max(0.05, rect.width) / vw);
+      var height = Math.min(1 - top, actualHeight / vh);
+
+      return { left: left, top: top, width: width, height: height };
+    } catch (e) { return null; }
+  }
+
+  function syncWebAreaBounds() {
+    cleanupRemovedFloatingButtons();
+    if (isAnyOverlayVisible()) {
+      Bridge.call("hideNativeWeb");
+      return;
+    }
+    var b = computeCurrentBounds();
+    if (b) Bridge.call("setNativeWebBounds", b.left, b.top, b.width, b.height);
+  }
+
+  window.addEventListener("resize", function () { setTimeout(syncWebAreaBounds, 50); });
+  document.addEventListener("DOMContentLoaded", function () { setTimeout(syncWebAreaBounds, 80); });
+  window.addEventListener("load", function () {
+    setTimeout(syncWebAreaBounds, 120);
+    setTimeout(syncWebAreaBounds, 500);
+    setTimeout(syncWebAreaBounds, 1200);
+  });
+
+  var toastTimer = null;
+  function showToast(msg, type) {
+    try {
+      if (toastTimer) clearTimeout(toastTimer);
+      toastEl.textContent = msg;
+      toastEl.className = "toast";
+      if (type === "warn") toastEl.classList.add("warn");
+      else if (type === "ok") toastEl.classList.add("ok");
+      else if (type === "err") toastEl.classList.add("err");
+      toastEl.classList.add("show");
+      toastTimer = setTimeout(function () { toastEl.classList.remove("show"); }, 1800);
+    } catch (e) {}
+  }
+
+  function openDrawer() {
+    lockWebBehindOverlay("drawer");
+    drawer.classList.remove("closing");
+    overlay.classList.remove("closing");
+    drawer.classList.add("open");
+    overlay.classList.add("open");
+    document.body.classList.add("drawer-open");
+  }
+
+  function closeDrawer(keepLockedForModal) {
+    drawer.classList.add("closing");
+    overlay.classList.add("closing");
+    if (!keepLockedForModal) delete activeOverlayTokens["drawer"];
+    setTimeout(function () {
+      drawer.classList.remove("open");
+      drawer.classList.remove("closing");
+      overlay.classList.remove("open");
+      overlay.classList.remove("closing");
+      if (!keepLockedForModal) {
+        delete activeOverlayTokens["drawer"];
+        applyOverlayLockState();
+      } else {
+        Bridge.call("hideNativeWeb");
+        Bridge.call("setUiOverlay", true);
+        setTimeout(function () {
+          if (!modalBackdrop.classList.contains("open") && !uaModalBackdrop.classList.contains("open")) {
+            delete activeOverlayTokens["drawer"];
+            applyOverlayLockState();
+          }
+        }, 1200);
+      }
+      cleanupRemovedFloatingButtons();
+    }, 160);
+  }
+
+  $("menuBtn").onclick = openDrawer;
+  $("closeBtn").onclick = function () { closeDrawer(false); };
+  overlay.onclick = function () { closeDrawer(false); };
+
+  function showModal(title, bodyHtml, actions, opts) {
+    opts = opts || {};
+    lockWebBehindOverlay("modal");
+    modalTitle.textContent = title || "";
+    modalBody.innerHTML = bodyHtml || "";
+    modalActions.innerHTML = "";
+    (actions || []).forEach(function (a) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = a.text;
+      if (a.className) btn.className = a.className;
+      btn.onclick = a.onClick;
+      modalActions.appendChild(btn);
+    });
+    modalActions.style.display = (actions && actions.length) ? "flex" : "none";
+    modalTitle.style.display = title ? "block" : "none";
+    if (opts.badge) {
+      modalBadge.textContent = opts.badge;
+      modalBadge.style.display = "inline-block";
+    } else {
+      modalBadge.style.display = "none";
+    }
+    miniModal.classList.toggle("large-modal", !!opts.large);
+    modalBackdrop.classList.add("open");
+    document.body.classList.add("drawer-open");
+  }
+
+  function closeModal() {
+    modalBackdrop.classList.remove("open");
+    miniModal.classList.remove("large-modal");
+    modalBadge.style.display = "none";
+    delete activeOverlayTokens["modal"];
+    unlockWebOverlay("drawer", 200);
+  }
+  $("modalClose").onclick = closeModal;
+  modalBackdrop.onclick = function (e) { if (e.target === modalBackdrop) closeModal(); };
+
+  function closeUaModal() {
+    uaModalBackdrop.classList.remove("open");
+    delete activeOverlayTokens["uaModal"];
+    unlockWebOverlay("drawer", 200);
+  }
+  $("uaModalCloseBtn").onclick = closeUaModal;
+  $("uaModalDoneBtn").onclick = closeUaModal;
+  uaModalBackdrop.onclick = function (e) { if (e.target === uaModalBackdrop) closeUaModal(); };
+
+  function copyText(text, okMsg) {
+    if (!text) return showToast("Nothing to copy", "warn");
+    var copiedByNative = false;
+    try {
+      if (typeof window.Android !== "undefined" && window.Android && typeof window.Android.copyToClipboard === "function") {
+        window.Android.copyToClipboard(text, okMsg || "Copied");
+        copiedByNative = true;
+      }
+    } catch (e) {}
+    if (!copiedByNative && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      try { navigator.clipboard.writeText(text); } catch (e) {}
+    }
+    if (!copiedByNative) {
+      try {
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      } catch (e) {}
+    }
+    showToast(okMsg || "Copied", "ok");
+  }
+
+  function triggerTextFileDownload(filename, content, mimeType) {
+    var safeName = filename || ("export_" + Date.now() + ".txt");
+    var safeMime = mimeType || "text/plain";
+    var text = String(content || "");
+    var nativeMethodNames = ["saveFileToDownloads", "saveFileToDownloadsImpl", "downloadTxt", "exportTextFile", "saveTextToDownloads"];
+
+    for (var i = 0; i < nativeMethodNames.length; i++) {
+      var mName = nativeMethodNames[i];
+      try {
+        if (typeof window.SheetAPI !== "undefined" && window.SheetAPI && typeof window.SheetAPI[mName] === "function") {
+          if (window.SheetAPI[mName](safeName, safeMime, text) !== false) return true;
+        }
+      } catch (e) {}
+      try {
+        if (typeof window.Android !== "undefined" && window.Android && typeof window.Android[mName] === "function") {
+          if (window.Android[mName](safeName, safeMime, text) !== false) return true;
+        }
+      } catch (e) {}
+    }
+
+    try {
+      var blob = new Blob([text], { type: safeMime + ";charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = safeName;
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () {
+        try { document.body.removeChild(a); } catch (e) {}
+        try { URL.revokeObjectURL(url); } catch (e) {}
+      }, 400);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  window.copyCurrentNumber = function () {
+    var num = currentNumber || (dispNumber ? dispNumber.textContent.replace("Number: ", "").replace("Mail: ", "").trim() : "");
+    if (!num || num === "-") return showToast("No number/mail", "warn");
+    copyText(num, "Copied: " + num);
+  };
+
+  window.copyCurrentOtp = function () {
+    var txt = dispOtp ? dispOtp.textContent.trim() : "";
+    if (!txt || txt === "OTP" || txt === "-" || txt === "") return showToast("No OTP", "warn");
+    copyText(txt, "OTP copied: " + txt);
+  };
+
+  function loadUrl(url) {
+    if (!url) return;
+    currentUrl = url;
+    try {
+      if (typeof window.Android !== "undefined" && window.Android && typeof window.Android.loadInNativeWeb === "function") {
+        mainFrame.style.display = "none";
+        window.Android.loadInNativeWeb(url);
+        setTimeout(syncWebAreaBounds, 120);
+        return;
+      }
+    } catch (e) {}
+    mainFrame.style.display = "block";
+    mainFrame.src = url;
+  }
+  setTimeout(function () {
+    loadUrl(LOGIN_URL);
+    syncWebAreaBounds();
+    cleanupRemovedFloatingButtons();
+  }, 350);
+
+  function stopAllAutomationAndGoHome() {
+    try { Bridge.call("stopAutomation"); } catch (e) {}
+    try { Bridge.call("stopTwoFactorAutomationPublic"); } catch (e) {}
+    try { Bridge.call("stopDongvanOtpPoll"); } catch (e) {}
+    try { Bridge.call("setActivePage", "insta"); } catch (e) {}
+
+    activeOverlayTokens = {};
+    if (overlayReleaseTimer) { clearTimeout(overlayReleaseTimer); overlayReleaseTimer = null; }
+    try {
+      if (drawer) { drawer.classList.remove("open"); drawer.classList.remove("closing"); }
+      if (overlay) { overlay.classList.remove("open"); overlay.classList.remove("closing"); }
+      if (modalBackdrop) modalBackdrop.classList.remove("open");
+      if (uaModalBackdrop) uaModalBackdrop.classList.remove("open");
+      if ($("tgSheetBackdrop")) { $("tgSheetBackdrop").classList.remove("open"); $("tgSheetBackdrop").style.display = "none"; }
+      document.body.classList.remove("drawer-open");
+    } catch (e) {}
+
+    loadUrl(HOME_URL);
+    setTimeout(function () {
+      applyOverlayLockState();
+      syncWebAreaBounds();
+      cleanupRemovedFloatingButtons();
+    }, 100);
+    showToast("🏠 Instagram Login পেজ ওপেন হচ্ছে", "ok");
+  }
+
+  function base32ToBytes(secret) {
+    var clean = (secret || "").toUpperCase().replace(/[^A-Z2-7]/g, "");
+    if (!clean.length) return new Uint8Array(0);
+    var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    var bits = "";
+    for (var i = 0; i < clean.length; i++) {
+      var val = alphabet.indexOf(clean.charAt(i));
+      if (val === -1) continue;
+      bits += val.toString(2).padStart(5, "0");
+    }
+    var bytes = [];
+    for (var j = 0; j + 8 <= bits.length; j += 8) bytes.push(parseInt(bits.substr(j, 8), 2));
+    return new Uint8Array(bytes);
+  }
+
+  function sha1Bytes(msgBytes) {
+    function rotl(n, b) { return (n << b) | (n >>> (32 - b)); }
+    var ml = msgBytes.length * 8;
+    var withOne = new Uint8Array(msgBytes.length + 1);
+    withOne.set(msgBytes);
+    withOne[msgBytes.length] = 0x80;
+    var padLen = (64 - ((withOne.length + 8) % 64)) % 64;
+    var padded = new Uint8Array(withOne.length + padLen + 8);
+    padded.set(withOne);
+    var view = new DataView(padded.buffer);
+    view.setUint32(padded.length - 8, Math.floor(ml / 0x100000000), false);
+    view.setUint32(padded.length - 4, ml >>> 0, false);
+
+    var h0 = 0x67452301, h1 = 0xEFCDAB89, h2 = 0x98BADCFE, h3 = 0x10325476, h4 = 0xC3D2E1F0;
+    var w = new Int32Array(80);
+    for (var offset = 0; offset < padded.length; offset += 64) {
+      for (var i = 0; i < 16; i++) w[i] = view.getInt32(offset + i * 4, false);
+      for (var t = 16; t < 80; t++) w[t] = rotl(w[t - 3] ^ w[t - 8] ^ w[t - 14] ^ w[t - 16], 1);
+      var a = h0, b = h1, c = h2, d = h3, e = h4;
+      for (var k = 0; k < 80; k++) {
+        var f, keyConst;
+        if (k < 20) { f = (b & c) | ((~b) & d); keyConst = 0x5A827999; }
+        else if (k < 40) { f = b ^ c ^ d; keyConst = 0x6ED9EBA1; }
+        else if (k < 60) { f = (b & c) | (b & d) | (c & d); keyConst = 0x8F1BBCDC; }
+        else { f = b ^ c ^ d; keyConst = 0xCA62C1D6; }
+        var temp = (rotl(a, 5) + f + e + keyConst + w[k]) | 0;
+        e = d; d = c; c = rotl(b, 30); b = a; a = temp;
+      }
+      h0 = (h0 + a) | 0; h1 = (h1 + b) | 0; h2 = (h2 + c) | 0; h3 = (h3 + d) | 0; h4 = (h4 + e) | 0;
+    }
+
+    var out = new Uint8Array(20);
+    var outView = new DataView(out.buffer);
+    outView.setInt32(0, h0, false); outView.setInt32(4, h1, false); outView.setInt32(8, h2, false); outView.setInt32(12, h3, false); outView.setInt32(16, h4, false);
+    return out;
+  }
+
+  function hmacSha1(keyBytes, msgBytes) {
+    var key = keyBytes;
+    if (key.length > 64) key = sha1Bytes(key);
+    var ipad = new Uint8Array(64), opad = new Uint8Array(64);
+    for (var i = 0; i < 64; i++) {
+      var kb = i < key.length ? key[i] : 0;
+      ipad[i] = kb ^ 0x36; opad[i] = kb ^ 0x5C;
+    }
+    var inner = new Uint8Array(ipad.length + msgBytes.length);
+    inner.set(ipad); inner.set(msgBytes, ipad.length);
+    var innerHash = sha1Bytes(inner);
+    var outer = new Uint8Array(opad.length + innerHash.length);
+    outer.set(opad); outer.set(innerHash, opad.length);
+    return sha1Bytes(outer);
+  }
+
+  function generateTotpFromSecret(secretInput, periodSec, digits) {
+    periodSec = periodSec || 30; digits = digits || 6;
+    if (!secretInput) return "";
+    var raw = String(secretInput).trim();
+    var secretMatch = raw.match(/secret=([A-Za-z2-7]+)/i);
+    if (secretMatch && secretMatch[1]) raw = secretMatch[1];
+    var keyBytes = base32ToBytes(raw);
+    if (!keyBytes.length) return "";
+    var epochSec = Math.floor(Date.now() / 1000);
+    var counter = Math.floor(epochSec / periodSec);
+    var counterBytes = new Uint8Array(8);
+    counterBytes[0] = Math.floor(counter / 0x1000000000000) & 0xff;
+    counterBytes[1] = Math.floor(counter / 0x10000000000) & 0xff;
+    counterBytes[2] = Math.floor(counter / 0x100000000) & 0xff;
+    counterBytes[3] = Math.floor(counter / 0x1000000) & 0xff;
+    counterBytes[4] = (counter >>> 24) & 0xff; counterBytes[5] = (counter >>> 16) & 0xff; counterBytes[6] = (counter >>> 8) & 0xff; counterBytes[7] = counter & 0xff;
+    var mac = hmacSha1(keyBytes, counterBytes);
+    var offset = mac[mac.length - 1] & 0x0f;
+    var binary = ((mac[offset] & 0x7f) << 24) | ((mac[offset + 1] & 0xff) << 16) | ((mac[offset + 2] & 0xff) << 8) | (mac[offset + 3] & 0xff);
+    var mod = Math.pow(10, digits);
+    return (binary % mod).toString().padStart(digits, "0");
+  }
+
+  function readClipboardText(callback) {
+    var nativeClip = "";
+    try { nativeClip = Bridge.call("getClipboardText") || Bridge.call("readClipboard") || ""; } catch (e) {}
+    if (nativeClip && String(nativeClip).trim()) { callback(String(nativeClip).trim()); return; }
+    if (navigator.clipboard && typeof navigator.clipboard.readText === "function") {
+      navigator.clipboard.readText().then(function (txt) { callback((txt || "").trim()); }).catch(function () { callback(""); });
+      return;
+    }
+    callback("");
+  }
+
+  function processTwoFactorKey(rawKey, sourceLabel) {
+    var cleanKey = (rawKey || "").trim();
+    if (!cleanKey) { showToast("⚠️ কোনো 2FA টোকেন/কি পাওয়া যায়নি", "warn"); return; }
+    try { localStorage.setItem("tp_last_2fa_key", cleanKey); } catch (e) {}
+    if (h2FA) h2FA.value = cleanKey;
+
+    var nativeCode = "";
+    try { nativeCode = Bridge.call("generate2FACodeFromKeyInput", cleanKey) || ""; } catch (e) {}
+    var code = (nativeCode && /^\d{6}$/.test(String(nativeCode).trim())) ? String(nativeCode).trim() : generateTotpFromSecret(cleanKey, 30, 6);
+
+    if (!code || !/^\d{6}$/.test(code)) { showToast("⚠️ অবৈধ 2FA Secret Key", "err"); return; }
+    copyText(code, "🔢 2FA Code Copied: " + code);
+    if (dispOtp) {
+      dispOtp.textContent = code;
+      dispOtp.style.background = "linear-gradient(180deg,#065f46,#047857)";
+      dispOtp.style.borderColor = "#10b981";
+      dispOtp.style.color = "#dcfce7";
+    }
+    showToast((sourceLabel ? sourceLabel + ": " : "") + "2FA Code " + code + " কপি হয়েছে", "ok");
+  }
+
+  function openManual2FAModal() {
+    var savedKey = localStorage.getItem("tp_last_2fa_key") || (h2FA ? h2FA.value : "") || "";
+    var body =
+      '<p class="modal-note" style="color:#cbd5e1;margin-bottom:8px;">এখানে 2FA Secret Key পেস্ট করুন এবং <b>OK</b> চাপুন — ৬ ডিজিটের কোড জেনারেট হয়ে কপি হবে।</p>' +
+      '<label class="modal-label" style="color:#fbbf24;">2FA Secret Key / Token</label>' +
+      '<input class="modal-input" id="manual2faKeyInput" type="text" value="' + savedKey.replace(/"/g, "&quot;") + '" placeholder="যেমন: JBSWY3DPEHPK3PXP" autocomplete="off" spellcheck="false">';
+
+    showModal("🔢 2FA Key → 6-Digit Code", body, [
+      {
+        text: "OK",
+        className: "modal-primary",
+        onClick: function () {
+          var inp = document.getElementById("manual2faKeyInput");
+          var val = inp ? inp.value.trim() : "";
+          if (!val) { showToast("2FA Key লিখুন বা পেস্ট করুন", "warn"); return; }
+          closeModal();
+          processTwoFactorKey(val, "Manual");
+        }
+      },
+      { text: "Cancel", onClick: closeModal }
+    ]);
+
+    setTimeout(function () {
+      var inp = document.getElementById("manual2faKeyInput");
+      if (inp) { inp.focus(); inp.select(); }
+    }, 80);
+  }
+
+  $("usernameBtn").onclick = function () {
+    var uname = "";
+    try { uname = Bridge.call("getLastGeneratedUsername") || ""; } catch (e) {}
+    if (!uname) uname = (hUsername ? hUsername.value : "") || localStorage.getItem("tp_last_username") || "";
+    if (uname && String(uname).trim()) {
+      uname = String(uname).trim();
+      try { localStorage.setItem("tp_last_username", uname); } catch (e) {}
+      if (hUsername) hUsername.value = uname;
+      copyText(uname, "Username copied: " + uname);
+      return;
+    }
+    var ret = Bridge.call("copyCurrentUsername");
+    if (ret && typeof ret === "string" && ret.trim()) copyText(ret.trim(), "Username copied: " + ret.trim());
+    else if (ret === true) showToast("Username copied", "ok");
+    else showToast("কোনো Username পাওয়া যায়নি", "warn");
+  };
+
+  $("cookiesBtn").onclick = function () {
+    var liveCk = "";
+    try { liveCk = Bridge.call("getCookies") || ""; } catch (e) {}
+    if (liveCk && String(liveCk).trim()) {
+      var cleanLive = String(liveCk).trim();
+      if (hCookies) hCookies.value = cleanLive;
+      try { localStorage.setItem("tp_last_cookies", cleanLive); } catch (e) {}
+      copyText(cleanLive, "Cookies Copied");
+      return;
+    }
+    var ck = (hCookies.value || "").trim() || localStorage.getItem("tp_last_cookies") || "";
+    if (ck) { copyText(ck, "Cookies Copied"); return; }
+    var ret = Bridge.call("copyCurrentCookies");
+    if (ret && typeof ret === "string" && ret.trim()) copyText(ret.trim(), "Cookies Copied");
+    else if (ret === true) showToast("Cookies Copied", "ok");
+    else showToast("কোনো Cookies পাওয়া যায়নি", "warn");
+  };
+
+  $("twofaBtn").onclick = function () {
+    loadUrl(TWOFA_URL);
+    setTimeout(syncWebAreaBounds, 120);
+    showToast("Opening 2FA page…", "ok");
+  };
+
+  (function bindTwoFaCnButton() {
+    var btn = $("twofaCNBtn");
+    var longPressTimer = null;
+    var longPressTriggered = false;
+
+    function startPress() {
+      longPressTriggered = false;
+      clearTimeout(longPressTimer);
+      longPressTimer = setTimeout(function () { longPressTriggered = true; openManual2FAModal(); }, 500);
+    }
+    function cancelPress() { clearTimeout(longPressTimer); }
+
+    btn.addEventListener("touchstart", startPress, { passive: true });
+    btn.addEventListener("touchend", cancelPress);
+    btn.addEventListener("touchcancel", cancelPress);
+    btn.addEventListener("mousedown", startPress);
+    btn.addEventListener("mouseup", cancelPress);
+    btn.addEventListener("mouseleave", cancelPress);
+    btn.addEventListener("contextmenu", function (e) {
+      e.preventDefault(); clearTimeout(longPressTimer); longPressTriggered = true; openManual2FAModal();
+    });
+
+    btn.onclick = function () {
+      if (longPressTriggered) { longPressTriggered = false; return; }
+      readClipboardText(function (clipText) {
+        if (clipText) { processTwoFactorKey(clipText, "Clipboard"); return; }
+        var nativeCode = "";
+        try { nativeCode = Bridge.call("generate2FACodeFromKey") || ""; } catch (e) {}
+        if (nativeCode && /^\d{6}$/.test(String(nativeCode).trim())) {
+          copyText(String(nativeCode).trim(), "🔢 2FA Code Copied: " + String(nativeCode).trim());
+          return;
+        }
+        var fallbackKey = localStorage.getItem("tp_last_2fa_key") || (h2FA ? h2FA.value : "") || "";
+        if (fallbackKey) processTwoFactorKey(fallbackKey, "Saved Key");
+        else showToast("⚠️ ক্লিপবোর্ডে 2FA টোকেন নেই", "warn");
+      });
+    };
+  })();
+
+  window.TP.setGeneratedUsername = function (u) {
+    if (!u) return;
+    var clean = String(u).trim();
+    if (!clean) return;
+    try { localStorage.setItem("tp_last_username", clean); } catch (e) {}
+    if (hUsername) hUsername.value = clean;
+  };
+
+  window.TP.setCookiesData = function (ck) {
+    if (!ck) return;
+    var clean = String(ck).trim();
+    if (!clean) return;
+    try { localStorage.setItem("tp_last_cookies", clean); } catch (e) {}
+    if (hCookies) hCookies.value = clean;
+  };
+
+  window.TP.openMenuDrawer = openDrawer;
+
+  var uaOptions = ["Default", "Android (Phone)", "Android (Tablet)", "Windows (Chrome)", "Windows (IE 11)", "macOS", "iPhone", "iPad", "Symbian"];
+  window.TP.showUAModal = function () {
+    lockWebBehindOverlay("uaModal");
+    var listEl = $("uaList");
+    listEl.innerHTML = "";
+    uaOptions.forEach(function (ua, idx) {
+      var div = document.createElement("div");
+      div.className = "ua-option" + (idx === 0 ? " active" : "");
+      div.innerHTML = '<div class="ua-radio"></div><div>' + ua + '</div>';
+      div.onclick = function () {
+        document.querySelectorAll(".ua-option").forEach(function (el) { el.classList.remove("active"); });
+        this.classList.add("active");
+        showToast("Selected: " + ua, "ok");
+        Bridge.call("setUserAgent", ua);
+      };
+      listEl.appendChild(div);
+    });
+    uaModalBackdrop.classList.add("open");
+    document.body.classList.add("drawer-open");
+  };
+
+  $("joinTelegramBtn").onclick = function () {
+    closeDrawer(false);
+    var tgUrl = "https://t.me/trustpointbd24";
+    try {
+      if (typeof window.Android !== "undefined" && window.Android && typeof window.Android.openExternalUrl === "function") {
+        window.Android.openExternalUrl(tgUrl);
+        return;
+      }
+    } catch (e) {}
+    window.open(tgUrl, "_blank");
+  };
+
+  $("refreshBtn").onclick = function () {
+    showToast("Refreshing…");
+    Bridge.call("reloadNativeWeb");
+    setTimeout(syncWebAreaBounds, 120);
+  };
+
+  $("pageBtn").onclick = function () {
+    showToast("🌐 Proxy Turned ON", "ok");
+    Bridge.call("setProxy", true);
+  };
+
+  $("addMailBtn").onclick = function () {
+    showToast("Getting mail...");
+    Bridge.call("getMail");
+  };
+
+  $("getMailBtn").onclick = function () {
+    var acc = consumeNextFreshMetaAccount();
+    if (!acc || !acc.phone || !acc.password) {
+      showToast("⚠️ No fresh Meta — Menu → Set Meta করুন", "warn");
+      return;
+    }
+    copyText(acc.phone, "✓ Meta: " + acc.phone + " | Pass set");
+  };
+
+  $("homeBtn").onclick = stopAllAutomationAndGoHome;
+
+  $("downloadRangeBtn").onclick = function () {
+    var mode = getSheetMode();
+    var list = getSavedAccountsList();
+    var count = list.length;
+    if (!count) { showToast("Nothing to download", "warn"); return; }
+
+    var d = new Date();
+    var dateStr = String(d.getDate()).padStart(2, "0") + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getFullYear()).slice(-2);
+    var label = mode === 1 ? "IG cookies" : (mode === 2 ? "IG 2FA" : "IG 2FA + Cookies");
+    var fname = count + "p " + label + " " + dateStr + ".txt";
+    var exportContent = list.map(function (acc) { return formatAccountByMode(acc, mode); }).join("\n");
+
+    try { Bridge.call("exportSheetToFile", fname, String(mode)); } catch (e) {}
+    var savedOk = triggerTextFileDownload(fname, exportContent, "text/plain");
+    if (savedOk) showToast("✓ Downloaded: " + fname, "ok");
+    else showToast("Export failed", "err");
+  };
+
+  var SHEET_MODE_LABELS = { 1: "📄 Sheet 1: UID+P+CK", 2: "🔐 Sheet 2: UID+P+2FA", 3: "🛡️ Sheet 3: All" };
+  function getSheetMode() {
+    var v = parseInt(localStorage.getItem("tp_sheet_mode") || "1", 10);
+    return (v >= 1 && v <= 3) ? v : 1;
+  }
+  function setSheetMode(mode) {
+    try { localStorage.setItem("tp_sheet_mode", String(mode)); } catch (e) {}
+    $("sheetModeBtn").textContent = SHEET_MODE_LABELS[mode] || "📄 Sheet 1";
+  }
+  setSheetMode(getSheetMode());
+
+  $("sheetModeBtn").onclick = function () {
+    closeDrawer(true);
+    setTimeout(function () {
+      var current = getSheetMode();
+      var modes = [
+        { id: 1, icon: "🍪", title: "UID + Password + Cookies", desc: "Cookies সেভ ও ভিউ হবে।" },
+        { id: 2, icon: "🔐", title: "UID + Password + 2FA", desc: "2FA Key সেভ ও ভিউ হবে।" },
+        { id: 3, icon: "🛡️", title: "UID + Password + 2FA + Cookies", desc: "সবকিছু একসাথে সেভ ও ভিউ হবে।" }
+      ];
+      var html = modes.map(function (m) {
+        var sel = (m.id === current) ? " selected" : "";
+        var check = (m.id === current) ? "✓" : "";
+        return '<div class="sm-option' + sel + '" data-mode="' + m.id + '"><div class="sm-icon">' + m.icon + '</div><div class="sm-body"><div class="sm-title">' + m.title + '</div><div class="sm-desc">' + m.desc + '</div></div><div class="sm-check">' + check + '</div></div>';
+      }).join("");
+      showModal("Sheet Mode", '<p class="modal-note" style="margin-bottom:8px">SAVE ও VIEW বাটনে কোন ফরম্যাট দেখাবে তা বেছে নিন:</p><div class="sm-list">' + html + '</div>', [{ text: "Close", onClick: closeModal }]);
+      setTimeout(function () {
+        modalBody.querySelectorAll(".sm-option").forEach(function (el) {
+          el.onclick = function () {
+            setSheetMode(parseInt(this.getAttribute("data-mode"), 10));
+            closeModal();
+            showToast("✓ Sheet Format updated", "ok");
+          };
+        });
+      }, 30);
+    }, 170);
+  };
+
+  function getSavedAccountsList() {
+    var list = [];
+    try {
+      var raw = Bridge.call("getSavedAccounts") || Bridge.call("getSavedSheetData");
+      var parsed = safeJsonParse(raw, []);
+      if (Array.isArray(parsed)) list = parsed;
+    } catch (e) {}
+    if (!list || !list.length) {
+      var local = safeJsonParse(localStorage.getItem("tp_saved_accounts"), []);
+      if (Array.isArray(local)) list = local;
+    }
+    return Array.isArray(list) ? list : [];
+  }
+
+  function formatAccountByMode(acc, mode) {
+    var uid = acc.username || acc.uid || acc.id || "-";
+    var pass = acc.pass || acc.password || "-";
+    var ck = acc.cookies || acc.ck || "";
+    var tfa = acc.twofa || acc["2fa"] || "";
+    var parts = [uid, pass];
+    if (mode === 1) {
+      if (ck) parts.push(ck);
+    } else if (mode === 2) {
+      if (tfa) parts.push("2FA:" + tfa);
+    } else {
+      if (ck) parts.push(ck);
+      if (tfa) parts.push("2FA:" + tfa);
+    }
+    return parts.join(" | ");
+  }
+
+  function renderSavedDataModal() {
+    var list = getSavedAccountsList();
+    var mode = getSheetMode();
+    var total = list.length;
+    var liveCount = list.filter(function (a) { return a.live !== false; }).length;
+
+    var cardsHtml = "";
+    if (total === 0) {
+      cardsHtml = '<div style="text-align:center;padding:30px 10px;color:#94a3b8;font-size:13px;">কোনো সেভ করা অ্যাকাউন্ট পাওয়া যায়নি।</div>';
+    } else {
+      cardsHtml = list.map(function (acc, idx) {
+        var displayLine = formatAccountByMode(acc, mode);
+        var shortLine = displayLine.length > 130 ? displayLine.substring(0, 130) + "..." : displayLine;
+        var copyLabel = (mode === 2) ? "🔑 Copy 2FA" : "🍪 Copy CK";
+        return '<div class="sd-card">' +
+          '<div class="sd-data-line">✅ <span class="sd-idx">#' + (idx + 1) + '</span> ' + shortLine.replace(/</g, "&lt;") + '</div>' +
+          '<div class="sd-btns">' +
+            '<button type="button" class="sd-btn sd-btn-login" onclick="window.TP.loginSavedAcc(' + idx + ')">🔑 Login</button>' +
+            '<button type="button" class="sd-btn sd-btn-copy" onclick="window.TP.copySavedAcc(' + idx + ')">' + copyLabel + '</button>' +
+            '<button type="button" class="sd-btn sd-btn-del" onclick="window.TP.deleteSavedAcc(' + idx + ')">🗑️ Delete</button>' +
+          '</div>' +
+        '</div>';
+      }).join("");
+    }
+
+    var body =
+      '<div class="sd-stats-row">' +
+        '<div class="sd-stat-box sd-stat-blue"><div class="sd-stat-label">TOTAL</div><div class="sd-stat-val">' + total + '</div></div>' +
+        '<div class="sd-stat-box sd-stat-green"><div class="sd-stat-label">LIVE</div><div class="sd-stat-val">' + liveCount + '</div></div>' +
+      '</div>' +
+      '<div class="sd-list">' + cardsHtml + '</div>';
+
+    showModal("Saved Data", body, [
+      { text: "📋 Copy All (" + total + ")", className: "modal-primary", onClick: function () {
+          if (!list.length) return showToast("Nothing to copy", "warn");
+          var allText = list.map(function (a) { return formatAccountByMode(a, mode); }).join("\n");
+          copyText(allText, "Copied " + list.length + " accounts");
+      }},
+      { text: "Close", onClick: closeModal }
+    ], { large: true });
+  }
+
+  window.TP.loginSavedAcc = function (idx) {
+    var list = getSavedAccountsList();
+    var acc = list[idx];
+    if (!acc) return;
+    closeModal();
+    showToast("Logging in #" + (idx + 1) + "...", "ok");
+    if (!Bridge.call("loginWithAccount", JSON.stringify(acc))) {
+      if (acc.cookies) Bridge.call("setCookies", acc.cookies);
+      loadUrl(HOME_URL);
+    }
+  };
+
+  window.TP.copySavedAcc = function (idx) {
+    var list = getSavedAccountsList();
+    var acc = list[idx];
+    if (!acc) return;
+    var mode = getSheetMode();
+    if (mode === 2 && acc.twofa) copyText(acc.twofa, "Copied 2FA: " + acc.twofa);
+    else if (acc.cookies) copyText(acc.cookies, "Copied Cookies #" + (idx + 1));
+    else copyText(formatAccountByMode(acc, mode), "Copied #" + (idx + 1));
+  };
+
+  window.TP.deleteSavedAcc = function (idx) {
+    var list = getSavedAccountsList();
+    var removed = list.splice(idx, 1)[0];
+    if (removed) {
+      Bridge.call("moveToRecovery", JSON.stringify([removed]));
+      Bridge.call("deleteSavedAccount", removed.username || removed.uid || String(idx));
+    }
+    try { localStorage.setItem("tp_saved_accounts", JSON.stringify(list)); } catch (e) {}
+    showToast("🗑️ Deleted #" + (idx + 1) + " (72h recovery)", "warn");
+    renderSavedDataModal();
+  };
+
+  $("viewRangeBtn").onclick = renderSavedDataModal;
+
+  $("saveRangeBtn").onclick = function () {
+    var liveCk = "";
+    try { liveCk = Bridge.call("getCookies") || ""; } catch (e) {}
+    if (liveCk && String(liveCk).trim()) {
+      hCookies.value = String(liveCk).trim();
+      try { localStorage.setItem("tp_last_cookies", hCookies.value); } catch (e) {}
+    }
+
+    var uid = (hUid.value || "").trim();
+    var pass = (hPass.value || "").trim() || lastSavedPassword || localStorage.getItem("tp_active_meta_pass") || localStorage.getItem("tp_password") || "";
+    var cookies = (hCookies.value || "").trim() || localStorage.getItem("tp_last_cookies") || "";
+    var twofa = (h2FA.value || "").trim() || localStorage.getItem("tp_active_meta_2fa") || localStorage.getItem("tp_last_2fa_key") || "";
+    var hotmail = (hMail.value || "").trim();
+
+    var username = "";
+    try { username = Bridge.call("getLastGeneratedUsername") || ""; } catch (e) {}
+    if (!username) username = (hUsername ? hUsername.value : "") || localStorage.getItem("tp_last_username") || uid;
+
+    if (!username && cookies) {
+      var m = cookies.match(/ds_user_id=(\d+)/) || cookies.match(/c_user=(\d+)/);
+      if (m) username = m[1];
+    }
+    if (!username) username = currentNumber || localStorage.getItem("tp_active_meta_phone") || "";
+    if (!username) { showToast("No data to save", "warn"); return; }
+
+    var list = getSavedAccountsList();
+    list.unshift({
+      username: username,
+      uid: username,
+      pass: pass,
+      cookies: cookies,
+      twofa: twofa,
+      hotmail: hotmail,
+      live: true,
+      time: Date.now()
+    });
+    try { localStorage.setItem("tp_saved_accounts", JSON.stringify(list)); } catch (e) {}
+
+    var sb = getSheetBridge();
+    if (sb && typeof sb.saveToSheet === "function") {
+      try { sb.saveToSheet(username, pass, cookies, hotmail, twofa); } catch (e) {}
+    }
+    showToast("✓ Saved: " + username, "ok");
+  };
+
+  var DEFAULT_RANGES = [
+    { rid: "23769", range: "+23769XXX", label: "Cameroon", flag: "🇨🇲" },
+    { rid: "237688", range: "+237688X...", label: "Cameroon", flag: "🇨🇲" },
+    { rid: "2290158", range: "+2290158...", label: "Benin", flag: "🇧🇯" },
+    { rid: "2250171", range: "+2250171...", label: "Ivory Coast", flag: "🇨🇮" },
+    { rid: "37495", range: "+37495XXX", label: "Armenia", flag: "🇦🇲" },
+    { rid: "38091", range: "+38091XXX", label: "Ukraine", flag: "🇺🇦" },
+    { rid: "2250151", range: "+2250151...", label: "Ivory Coast", flag: "🇨🇮" },
+    { rid: "22465", range: "+22465XXX", label: "Guinea", flag: "🇬🇳" },
+    { rid: "37444", range: "+37444XXX", label: "Armenia", flag: "🇦🇲" },
+    { rid: "251924", range: "+251924X...", label: "Ethiopia", flag: "🇪🇹" },
+    { rid: "22892", range: "+22892XXX", label: "Togo", flag: "🇹🇬" },
+    { rid: "3809172", range: "+3809172...", label: "Ukraine", flag: "🇺🇦" },
+    { rid: "2289088", range: "+2289088...", label: "Togo", flag: "🇹🇬" },
+    { rid: "22870", range: "+22870XXX", label: "Togo", flag: "🇹🇬" },
+    { rid: "251925", range: "+251925X...", label: "Ethiopia", flag: "🇪🇹" },
+    { rid: "26134", range: "+26134XXX", label: "Madagascar", flag: "🇲🇬" },
+    { rid: "26138", range: "+26138XXX", label: "Madagascar", flag: "🇲🇬" },
+    { rid: "3809121", range: "+3809121...", label: "Ukraine", flag: "🇺🇦" },
+    { rid: "3809175", range: "+3809175...", label: "Ukraine", flag: "🇺🇦" },
+    { rid: "22890", range: "+22890XXX", label: "Togo", flag: "🇹🇬" }
+  ];
+
+  function getCountryFlag(name) {
+    var n = (name || "").toLowerCase().trim();
+    var map = {
+      "cameroon":"🇨🇲","benin":"🇧🇯","ivory coast":"🇨🇮","côte d'ivoire":"🇨🇮","ivory":"🇨🇮",
+      "armenia":"🇦🇲","ukraine":"🇺🇦","guinea":"🇬🇳","ethiopia":"🇪🇹","togo":"🇹🇬",
+      "madagascar":"🇲🇬","bangladesh":"🇧🇩","india":"🇮🇳","pakistan":"🇵🇰","nepal":"🇳🇵",
+      "usa":"🇺🇸","united states":"🇺🇸","us":"🇺🇸","uk":"🇬🇧","united kingdom":"🇬🇧",
+      "canada":"🇨🇦","australia":"🇦🇺","germany":"🇩🇪","france":"🇫🇷","italy":"🇮🇹",
+      "spain":"🇪🇸","russia":"🇷🇺","china":"🇨🇳","japan":"🇯🇵","korea":"🇰🇷",
+      "south korea":"🇰🇷","singapore":"🇸🇬","malaysia":"🇲🇾","indonesia":"🇮🇩",
+      "philippines":"🇵🇭","thailand":"🇹🇭","vietnam":"🇻🇳","brazil":"🇧🇷",
+      "mexico":"🇲🇽","argentina":"🇦🇷","chile":"🇨🇱","colombia":"🇨🇴",
+      "nigeria":"🇳🇬","ghana":"🇬🇭","kenya":"🇰🇪","south africa":"🇿🇦",
+      "egypt":"🇪🇬","morocco":"🇲🇦","algeria":"🇩🇿","tunisia":"🇹🇳",
+      "senegal":"🇸🇳","mali":"🇲🇱","niger":"🇳🇪","sudan":"🇸🇩",
+      "uganda":"🇺🇬","tanzania":"🇹🇿","mozambique":"🇲🇿","zimbabwe":"🇿🇼",
+      "angola":"🇦🇴","congo":"🇨🇬","gabon":"🇬🇦","liberia":"🇱🇷",
+      "sierra leone":"🇸🇱","gambia":"🇬🇲","mauritania":"🇲🇷","rwanda":"🇷🇼"
+    };
+    if (map[n]) return map[n];
+    for (var k in map) { if (n.indexOf(k) !== -1) return map[k]; }
+    return "🌐";
+  }
+
+  function renderRangeModal(ranges) {
+    var list = (ranges && ranges.length) ? ranges : DEFAULT_RANGES;
+    var savedRid = localStorage.getItem("tp_selected_rid") || list[0].rid;
+    var savedRange = localStorage.getItem("tp_selected_range") || list[0].range;
+    var savedCountry = localStorage.getItem("tp_selected_country") || list[0].label || "Service";
+    var savedFlag = getCountryFlag(savedCountry);
+
+    var limit = Math.min(list.length, 20);
+    var cardsHtml = "";
+    for (var i = 0; i < limit; i++) {
+      var r = list[i];
+      var isSel = (String(r.rid) === String(savedRid)) ? " selected" : "";
+      var flag = r.flag || getCountryFlag(r.label);
+      cardsHtml += '<div class="rm-card' + isSel + '" onclick="window.TP.selectRange(\'' + r.rid + '\', \'' + r.range + '\', \'' + (r.label || "Service").replace(/'/g, "") + '\')">' +
+        '<div class="rm-flag">' + flag + '</div>' +
+        '<div class="rm-code">' + r.range + '</div>' +
+        '<div class="rm-country">' + (r.label || "Service") + '</div>' +
+      '</div>';
+    }
+
+    var body =
+      '<div class="rm-selected-banner">✓ Selected: ' + savedFlag + ' ' + savedRange + ' • ' + savedCountry + '</div>' +
+      '<p class="modal-note" style="font-size:12px;color:#94a3b8;">একটি দেশের রেঞ্জ সিলেক্ট করুন – Range ইনপুট বক্সে সেভ হবে</p>' +
+      '<div class="rm-sub-bar">SELECT RANGE</div>' +
+      '<div class="rm-grid">' + cardsHtml + '</div>';
+
+    showModal("Ranges", body, [{ text: "Close", className: "modal-blue-full", onClick: closeModal }], { large: true, badge: list.length + " Total" });
+  }
+
+  $("rangeBtn").onclick = function () {
+    showToast("Loading ranges…");
+    var called = Bridge.call("loadRanges");
+    if (!called) renderRangeModal(DEFAULT_RANGES);
+  };
+
+  window.TP.onRangesLoaded = function (jsonString) {
+    var ranges = safeJsonParse(jsonString, []);
+    renderRangeModal(ranges);
+  };
+
+  window.TP.selectRange = function (rid, range, label) {
+    try {
+      localStorage.setItem("tp_selected_rid", rid);
+      localStorage.setItem("tp_selected_range", range);
+      if (label) localStorage.setItem("tp_selected_country", label);
+    } catch (e) {}
+    document.getElementById("manualRangeInput").value = range.replace(/^\+/, "");
+    Bridge.call("saveSelectedRange", JSON.stringify({ rid: rid, range: range, label: label || "" }));
+    closeModal();
+    showToast("✓ Selected: " + range, "ok");
+  };
+
+  setTimeout(function () {
+    try {
+      var savedJson = Bridge.call("getSavedRange");
+      var obj = safeJsonParse(savedJson, null);
+      if (obj && obj.range) {
+        document.getElementById("manualRangeInput").value = obj.range.replace(/^\+/, "");
+        if (obj.rid) localStorage.setItem("tp_selected_rid", obj.rid);
+        localStorage.setItem("tp_selected_range", obj.range);
+        if (obj.label) localStorage.setItem("tp_selected_country", obj.label);
+      }
+    } catch (e) {}
+  }, 1000);
+
+  function getOtpHistoryList() {
+    var list = [];
+    try {
+      var raw = Bridge.call("getOtpHistory");
+      var parsed = safeJsonParse(raw, []);
+      if (Array.isArray(parsed)) list = parsed;
+    } catch (e) {}
+    if (!list || !list.length) {
+      var local = safeJsonParse(localStorage.getItem("tp_otp_history"), []);
+      if (Array.isArray(local)) list = local;
+    }
+    return Array.isArray(list) ? list : [];
+  }
+
+  function renderOtpHistoryModal() {
+    var list = getOtpHistoryList();
+    var html = "";
+    if (!list.length) {
+      html = '<div style="text-align:center;padding:30px 10px;color:#94a3b8;font-size:13px;">এখনো কোনো OTP হিস্টোরি জমা হয়নি।</div>';
+    } else {
+      html = '<div style="max-height:55vh;overflow-y:auto;">' + list.map(function (item) {
+        var code = item.otp || item.code || "-";
+        var num = item.number || item.num || "Unknown";
+        var time = item.time || "";
+        return '<div class="otp-hist-item">' +
+          '<div>' +
+            '<div class="otp-hist-code">' + code + '</div>' +
+            '<div class="otp-hist-meta">📱 ' + num + (time ? ' • ' + time : '') + '</div>' +
+          '</div>' +
+          '<button type="button" class="sd-btn sd-btn-copy" onclick="window.TP.copyHistOtp(\'' + code + '\')">Copy</button>' +
+        '</div>';
+      }).join("") + '</div>';
+    }
+
+    showModal("📜 OTP History (" + list.length + ")", html, [
+      { text: "Clear History", onClick: function () {
+          try { localStorage.removeItem("tp_otp_history"); } catch (e) {}
+          Bridge.call("clearOtpHistory");
+          showToast("✓ OTP History cleared", "ok");
+          renderOtpHistoryModal();
+      }},
+      { text: "Close", className: "modal-primary", onClick: closeModal }
+    ]);
+  }
+
+  window.TP.copyHistOtp = function (code) { copyText(code, "OTP Copied: " + code); };
+
+  $("otpHistoryBtn").onclick = function () {
+    closeDrawer(true);
+    setTimeout(renderOtpHistoryModal, 170);
+  };
+
+  $("manualGetBtn").onclick = function () {
+    if (!Bridge.has()) { showToast("Bridge unavailable", "err"); return; }
+    var inputVal = $("manualRangeInput").value.trim();
+    var rid = "";
+    if (inputVal && /[0-9]/.test(inputVal)) rid = inputVal.replace(/X.*$/i, "").replace(/[^0-9]/g, "");
+    if (!rid) rid = localStorage.getItem("tp_selected_rid") || "";
+    if (!rid) { showToast("Range লিখুন বা সিলেক্ট করুন", "warn"); return; }
+    Bridge.call("getManualNumber", rid);
+    showToast("Getting number...");
+  };
+
+  window.TP.setNumber = function (num, country) {
+    currentNumber = num;
+    currentCountry = country;
+    if (dispNumber) dispNumber.textContent = "Number: " + (num || "-");
+    if (dispCountry) dispCountry.textContent = "Country: " + (country || "-");
+  };
+
+  window.TP.setOtp = function (otp) {
+    if (!dispOtp) return;
+    dispOtp.textContent = otp || "OTP";
+    if (otp) {
+      dispOtp.style.background = "linear-gradient(180deg,#065f46,#047857)";
+      dispOtp.style.borderColor = "#10b981";
+      dispOtp.style.color = "#dcfce7";
+
+      var hist = getOtpHistoryList();
+      var nowStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      if (!hist.length || hist[0].otp !== otp || hist[0].number !== currentNumber) {
+        hist.unshift({ otp: otp, number: currentNumber || "-", country: currentCountry || "", time: nowStr });
+        if (hist.length > 100) hist.length = 100;
+        try { localStorage.setItem("tp_otp_history", JSON.stringify(hist)); } catch (e) {}
+      }
+    } else {
+      dispOtp.style.background = "linear-gradient(180deg,#7f1d1d,#450a0a)";
+      dispOtp.style.borderColor = "#ef4444";
+      dispOtp.style.color = "#fecaca";
+    }
+  };
+
+  var metaOn = localStorage.getItem("tp_meta_on") === "true";
+  function updateMetaToggleUI() {
+    var btn = $("metaToggleBtn");
+    if (!btn) return;
+    if (metaOn) { btn.textContent = "Meta: ON"; btn.classList.add("on"); }
+    else { btn.textContent = "Meta: OFF"; btn.classList.remove("on"); }
+  }
+  $("metaToggleBtn").onclick = function () {
+    metaOn = !metaOn;
+    try { localStorage.setItem("tp_meta_on", String(metaOn)); } catch (e) {}
+    updateMetaToggleUI();
+    showToast("Meta Automation " + (metaOn ? "ON" : "OFF"), "ok");
+    Bridge.call("toggleMetaMode", metaOn);
+  };
+  updateMetaToggleUI();
+
+  $("setMetaBtn").onclick = function () {
+    closeDrawer(true);
+    setTimeout(function () {
+      var pool = getStoredMetaPool();
+
+      function renderColored(list) {
+        if (!list.length) return '<div style="color:#64748b;text-align:center;padding:16px;font-size:12px;background:#0a0d12;border-radius:8px;">No accounts</div>';
+        return list.map(function (m) {
+          var st = m.status || "fresh";
+          var color = st === "fresh" ? "#22c55e" : (st === "used" ? "#eab308" : "#ef4444");
+          var tag   = st === "fresh" ? "🟢" : (st === "used" ? "🟡" : "🔴");
+          return '<div style="color:' + color + ';padding:4px 8px;border-left:3px solid ' + color +
+                 ';margin-bottom:2px;background:#0f1217;font-family:monospace;font-size:11.5px;line-height:1.5;">' +
+                 tag + ' ' + (m.password || "") + ' ' + (m.phone || "") + (m.twofa ? ' ' + m.twofa : '') + '</div>';
+        }).join("");
+      }
+
+      var freshCnt = pool.filter(function (x) { return (x.status || "fresh") === "fresh"; }).length;
+      var usedCnt = pool.filter(function (x) { return x.status === "used"; }).length;
+      var brokenCnt = pool.filter(function (x) { return x.status === "broken"; }).length;
+
+      var body =
+        '<div style="display:flex;justify-content:space-between;margin-bottom:8px;">' +
+          '<span style="color:#22c55e;font-size:11px;font-weight:800;">🟢 Fresh (' + freshCnt + ')</span>' +
+          '<span style="color:#eab308;font-size:11px;font-weight:800;">🟡 Used (' + usedCnt + ')</span>' +
+          '<span style="color:#ef4444;font-size:11px;font-weight:800;">🔴 Broken (' + brokenCnt + ')</span>' +
+        '</div>' +
+        '<div id="metaColoredView" style="max-height:170px;overflow-y:auto;background:#0a0d12;padding:6px;border-radius:8px;border:1px solid #334155;margin-bottom:10px;">' +
+          renderColored(pool) +
+        '</div>' +
+        '<p class="modal-note" style="font-size:11px;">Format: <code>Password Phone 2FAKey</code> অথবা <code>Phone Password 2FAKey</code></p>' +
+        '<textarea class="modal-textarea" id="metaBulkInput" placeholder="Shakil21 +8801780536279 4ESQFBWZHEQZYVBK" style="height:150px;">' +
+          pool.map(function (m) { return formatMetaLineDisplay(m); }).join("\n") +
+        '</textarea>';
+
+      showModal("Set Meta (Bulk)", body, [
+        { text: "Save Accounts", className: "modal-primary", onClick: function () {
+            var val = document.getElementById("metaBulkInput").value.trim();
+            var lines = val.split("\n").filter(function (l) { return l.trim(); });
+            if (lines.length > 200) { lines = lines.slice(0, 200); showToast("Max 200, trimmed", "warn"); }
+
+            var statusMap = {};
+            pool.forEach(function (m) { statusMap[m.phone] = m.status; });
+
+            var seen = {};
+            var newPool = [];
+            lines.forEach(function (line) {
+              var parsed = parseMetaLineSmart(line, statusMap);
+              if (parsed && parsed.phone && parsed.password && !seen[parsed.phone]) {
+                seen[parsed.phone] = true;
+                newPool.push(parsed);
+              }
+            });
+
+            saveStoredMetaPool(newPool);
+
+            if (newPool.length > 0 && !metaOn) {
+              metaOn = true;
+              try { localStorage.setItem("tp_meta_on", "true"); } catch (e) {}
+              updateMetaToggleUI();
+              try { Bridge.call("toggleMetaMode", true); } catch (e) {}
+            }
+
+            showToast("✓ Saved " + newPool.length + " Meta accounts", "ok");
+            closeModal();
+        }},
+        { text: "Reset All → Fresh", onClick: function () {
+            var resetPool = getStoredMetaPool().map(function (m) { m.status = "fresh"; return m; });
+            saveStoredMetaPool(resetPool);
+            try { Bridge.call("resetMetaPoolNative"); } catch (e) {}
+            showToast("All reset to fresh", "ok");
+            closeModal();
+        }},
+        { text: "Cancel", onClick: closeModal }
+      ], { large: true });
+    }, 170);
+  };
+
+  /* CREATE IG: Set Meta থেকে নাম্বার ও পাসওয়ার্ড নিয়ে সেট ও অটোমেশন ট্রিগার */
+  $("createFbBtn").onclick = function () {
+    if (!Bridge.has()) { showToast("Bridge unavailable", "err"); return; }
+
+    var pool = getStoredMetaPool();
+    var hasFreshInHtml = pool.some(function (m) { return (m.status || "fresh") === "fresh"; });
+    var stats = safeJsonParse(Bridge.call("getMetaStatsNative"), {});
+    var hasFreshInNative = (stats && typeof stats.fresh === "number" && stats.fresh > 0);
+
+    if (!hasFreshInHtml && !hasFreshInNative) {
+      showToast("⚠️ No fresh Meta account — Menu → Set Meta করুন", "warn");
+      return;
+    }
+
+    var freshAcc = consumeNextFreshMetaAccount();
+    if (freshAcc && freshAcc.phone && freshAcc.password) {
+      showToast("▶️ IG Automation: " + freshAcc.phone, "ok");
+      var triggered = false;
+      try { Bridge.call("startIgAutomationWith2FA", freshAcc.phone, freshAcc.password, freshAcc.twofa || ""); triggered = true; } catch (e) {}
+      try { Bridge.call("startIgAutomation", freshAcc.phone, freshAcc.password); triggered = true; } catch (e) {}
+      try { Bridge.call("startCreateIgProcess"); triggered = true; } catch (e) {}
+      if (!triggered) showToast("Automation bridge call failed", "err");
+      return;
+    }
+
+    showToast("▶️ IG Automation শুরু হচ্ছে…", "ok");
+    Bridge.call("startCreateIgProcess");
+  };
+
+  $("sheetRecoveryBtn").onclick = function () {
+    closeDrawer(true);
+    setTimeout(function () {
+      var list = safeJsonParse(Bridge.call("getRecoveryList"), []);
+      var html = "";
+      if (!Array.isArray(list) || !list.length) {
+        html = '<div style="text-align:center;color:#64748b;padding:30px;font-size:13px;">No deleted data in last 72 hours.</div>';
+      } else {
+        html = '<div style="max-height:55vh;overflow-y:auto;">' + list.map(function (item, i) {
+          var data = typeof item.data === "string" ? item.data : JSON.stringify(item.data);
+          var lines = data.split("\n").filter(function (l) { return l; });
+          var preview = lines.slice(0, 3).map(function (l) { return l.substring(0, 60) + (l.length > 60 ? "..." : ""); }).join("\n");
+          if (lines.length > 3) preview += "\n... +" + (lines.length - 3) + " more";
+          return '<div class="otp-hist-item" style="align-items:flex-start;flex-direction:column;">' +
+            '<div style="color:#4ade80;font-size:12px;font-weight:800;">⏰ ' + (item.hoursLeft || "?") + 'h left</div>' +
+            '<div style="font-family:monospace;font-size:11px;color:#cbd5e1;white-space:pre-wrap;margin:6px 0;">' + preview.replace(/</g, "&lt;") + '</div>' +
+            '<div style="display:flex;gap:6px;">' +
+              '<button type="button" class="sd-btn sd-btn-login" onclick="window.TP.recoverItem(' + i + ')">♻️ Recover</button>' +
+              '<button type="button" class="sd-btn sd-btn-copy" onclick="window.TP.downloadRecoverItem(' + i + ')">⬇️ Download</button>' +
+            '</div></div>';
+        }).join("") + '</div>';
+      }
+      showModal("♻️ Recovery (72h)", html, [{ text: "Close", onClick: closeModal }], { large: true });
+    }, 170);
+  };
+
+  window.TP.recoverItem = function (idx) {
+    var list = safeJsonParse(Bridge.call("getRecoveryList"), []);
+    if (!Array.isArray(list) || !list[idx]) return;
+    Bridge.call("restoreRecoveryItem", idx);
+    showToast("✓ Recovered", "ok");
+    closeModal();
+  };
+
+  window.TP.downloadRecoverItem = function (idx) {
+    var list = safeJsonParse(Bridge.call("getRecoveryList"), []);
+    var item = Array.isArray(list) ? list[idx] : null;
+    if (!item) return;
+    var data = typeof item.data === "string" ? item.data : JSON.stringify(item.data);
+    var ok = triggerTextFileDownload("recovered_" + Date.now() + ".txt", data, "text/plain");
+    if (ok) showToast("✓ Downloaded", "ok");
+    else showToast("Export failed", "err");
+  };
+
+  $("clearSheetBtn").onclick = function () {
+    var currentData = localStorage.getItem("tp_saved_accounts") || JSON.stringify(getSavedAccountsList());
+    Bridge.call("moveToRecovery", currentData);
+    try { localStorage.removeItem("tp_saved_accounts"); } catch (e) {}
+    Bridge.call("clearSheetData");
+    showToast("🧹 Cleared (recoverable for 72h)", "ok");
+    closeDrawer(false);
+  };
+
+  $("passwordBtn").onclick = function () {
+    closeDrawer(true);
+    setTimeout(function () {
+      var singlePwd = localStorage.getItem("tp_password") || "";
+      var randomPwds = localStorage.getItem("tp_random_passwords_raw") || "";
+      var mode = localStorage.getItem("tp_pwd_mode") || "my";
+      var body =
+        '<label class="modal-label" style="color:#fbbf24">1. Single Password</label>' +
+        '<input class="modal-input" id="pwdSingleInput" type="text" value="' + singlePwd + '" placeholder="Enter one password..." style="margin-bottom:12px;">' +
+        '<label class="modal-label" style="color:#22c55e">2. Random Passwords (One per line)</label>' +
+        '<textarea class="modal-textarea" id="pwdRandomInput" placeholder="Password1\nPassword2" style="height:110px;">' + randomPwds + '</textarea>' +
+        '<label class="modal-label" style="margin-top:12px;color:#38bdf8;">Select Mode:</label>' +
+        '<select id="pwdModeSelect" class="modal-input">' +
+          '<option value="my" ' + (mode === "my" ? "selected" : "") + '>Use Single Password</option>' +
+          '<option value="random" ' + (mode === "random" ? "selected" : "") + '>Use Random Passwords</option>' +
+        '</select>';
+      showModal("Password Settings", body, [
+        { text: "Save", className: "modal-primary", onClick: function () {
+            var sPwd = document.getElementById("pwdSingleInput").value.trim();
+            var rPwds = document.getElementById("pwdRandomInput").value.trim();
+            var m = document.getElementById("pwdModeSelect").value;
+            try {
+              localStorage.setItem("tp_password", sPwd);
+              localStorage.setItem("tp_random_passwords_raw", rPwds);
+              localStorage.setItem("tp_pwd_mode", m);
+              var arr = rPwds.split("\n").map(function (p) { return p.trim(); }).filter(Boolean);
+              localStorage.setItem("tp_random_passwords", JSON.stringify(arr));
+            } catch (e) {}
+            lastSavedPassword = sPwd;
+            Bridge.call("savePassword", sPwd);
+            showToast("✓ Password settings saved", "ok");
+            closeModal();
+        }},
+        { text: "Cancel", onClick: closeModal }
+      ]);
+    }, 170);
+  };
+
+  $("customNameBtn").onclick = function () {
+    closeDrawer(true);
+    setTimeout(function () {
+      var current = localStorage.getItem("tp_name_mode") || "";
+      var body =
+        '<label class="modal-label">Select Name Country</label>' +
+        '<select id="nameModeInput" class="modal-input">' +
+          '<option value="" ' + (current === "" ? "selected" : "") + '>No Mode (Random)</option>' +
+          '<option value="us" ' + (current === "us" ? "selected" : "") + '>🇺🇸 USA</option>' +
+          '<option value="cm" ' + (current === "cm" ? "selected" : "") + '>🇨🇲 Cameroon</option>' +
+          '<option value="ua" ' + (current === "ua" ? "selected" : "") + '>🇺🇦 Ukraine</option>' +
+          '<option value="bj" ' + (current === "bj" ? "selected" : "") + '>🇧🇯 Benin</option>' +
+        '</select>';
+      showModal("Name Settings", body, [
+        { text: "Save", className: "modal-primary", onClick: function () {
+            var m = document.getElementById("nameModeInput").value;
+            try { localStorage.setItem("tp_name_mode", m); } catch (e) {}
+            Bridge.call("setNameMode", m);
+            showToast("✓ Name Mode updated", "ok");
+            closeModal();
+        }},
+        { text: "Cancel", onClick: closeModal }
+      ]);
+    }, 170);
+  };
+
+  $("proxyBtn").onclick = function () {
+    closeDrawer(true);
+    setTimeout(function () {
+      var ip = localStorage.getItem("tp_proxy_ip") || "";
+      var port = localStorage.getItem("tp_proxy_port") || "";
+      var user = localStorage.getItem("tp_proxy_user") || "";
+      var pass = localStorage.getItem("tp_proxy_pass") || "";
+      var body =
+        '<label class="modal-label">Proxy IP / Host</label>' +
+        '<input class="modal-input" id="proxyIp" type="text" value="' + ip + '" placeholder="e.g. 192.168.1.1" style="margin-bottom:8px;">' +
+        '<label class="modal-label">Port</label>' +
+        '<input class="modal-input" id="proxyPort" type="number" value="' + port + '" placeholder="e.g. 8080" style="margin-bottom:8px;">' +
+        '<label class="modal-label">Username (Optional)</label>' +
+        '<input class="modal-input" id="proxyUser" type="text" value="' + user + '" placeholder="Username" style="margin-bottom:8px;">' +
+        '<label class="modal-label">Password (Optional)</label>' +
+        '<input class="modal-input" id="proxyPass" type="text" value="' + pass + '" placeholder="Password">';
+      showModal("🌐 Proxy Settings", body, [
+        { text: "Save", className: "modal-primary", onClick: function () {
+            var pip = document.getElementById("proxyIp").value.trim();
+            var pport = document.getElementById("proxyPort").value.trim();
+            var puser = document.getElementById("proxyUser").value.trim();
+            var ppass = document.getElementById("proxyPass").value.trim();
+            try {
+              localStorage.setItem("tp_proxy_ip", pip);
+              localStorage.setItem("tp_proxy_port", pport);
+              localStorage.setItem("tp_proxy_user", puser);
+              localStorage.setItem("tp_proxy_pass", ppass);
+            } catch (e) {}
+            Bridge.call("setBrowserProxy", pip, pport, puser, ppass);
+            showToast("✓ Proxy saved", "ok");
+            closeModal();
+        }},
+        { text: "Clear", onClick: function () {
+            try {
+              localStorage.removeItem("tp_proxy_ip");
+              localStorage.removeItem("tp_proxy_port");
+              localStorage.removeItem("tp_proxy_user");
+              localStorage.removeItem("tp_proxy_pass");
+            } catch (e) {}
+            Bridge.call("setBrowserProxy", "", "", "", "");
+            showToast("Proxy cleared", "warn");
+            closeModal();
+        }},
+        { text: "Cancel", onClick: closeModal }
+      ]);
+    }, 170);
+  };
+
+  $("desktopBtn").onclick = function () {
+    closeDrawer(false);
+    setTimeout(function () { window.TP.showUAModal(); }, 170);
+  };
+
+  $("themeToggleBtn").onclick = function () {
+    var theme = localStorage.getItem("tp_theme") || "dark";
+    theme = (theme === "dark") ? "light" : "dark";
+    try { localStorage.setItem("tp_theme", theme); } catch (e) {}
+    Bridge.call("applyDarkMode", theme === "dark");
+    showToast("Theme: " + theme, "ok");
+  };
+
+  var autoNumberOn = localStorage.getItem("tp_auto_number") === "true";
+  function updateAutoNumberBtn() {
+    var btn = $("autoNumberBtn");
+    if (btn) btn.textContent = "🔢 Auto Num: " + (autoNumberOn ? "ON" : "OFF");
+  }
+  $("autoNumberBtn").onclick = function () {
+    autoNumberOn = !autoNumberOn;
+    try { localStorage.setItem("tp_auto_number", String(autoNumberOn)); } catch (e) {}
+    updateAutoNumberBtn();
+    Bridge.call("setAutoNumber", autoNumberOn);
+    showToast("Auto Number " + (autoNumberOn ? "ON" : "OFF"), "ok");
+  };
+  updateAutoNumberBtn();
+
+  $("mailModBtn").onclick = function () {
+    closeDrawer(true);
+    setTimeout(function () {
+      var mail = (hMail.value || "").trim() || localStorage.getItem("tp_hotmail") || "";
+      var body =
+        '<p class="modal-note">Hotmail / Mail address দিন:</p>' +
+        '<input class="modal-input" id="mailModInput" type="text" value="' + mail + '" placeholder="example@hotmail.com">';
+      showModal("📧 Mail Mode", body, [
+        { text: "Save", className: "modal-primary", onClick: function () {
+            var v = document.getElementById("mailModInput").value.trim();
+            try { localStorage.setItem("tp_hotmail", v); } catch (e) {}
+            if (hMail) hMail.value = v;
+            Bridge.call("setHotmail", v);
+            showToast("✓ Mail saved", "ok");
+            closeModal();
+        }},
+        { text: "Cancel", onClick: closeModal }
+      ]);
+    }, 170);
+  };
+
+  $("liveCheckerBtn").onclick = function () {
+    closeDrawer(true);
+    showToast("📡 Starting live check…");
+    var ret = Bridge.call("startLiveCheck");
+    if (!ret) showToast("Live checker unavailable", "warn");
+  };
+
+  $("clearWebTopBtn").onclick = function () {
+    try {
+      if (mainFrame && mainFrame.style.display !== "none") mainFrame.src = "about:blank";
+      Bridge.call("clearWebInstant");
+      loadUrl(HOME_URL);
+      setTimeout(function () {
+        applyOverlayLockState();
+        syncWebAreaBounds();
+      }, 150);
+    } catch (e) {}
+    showToast("🧹 Web cleared", "ok");
+  };
+
+  window.TP.showToast  = showToast;
+  window.TP.openModal  = showModal;
+  window.TP.closeModal = closeModal;
+
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,3109 @@
+package com.instaraj.app
+
+import android.Manifest
+import android.annotation.SuppressLint
+import android.app.Activity
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.os.Environment
+import android.os.Handler
+import android.os.Looper
+import android.os.PowerManager
+import android.provider.MediaStore
+import android.provider.Settings
+import android.util.Log
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.view.WindowManager
+import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
+import android.webkit.ValueCallback
+import android.webkit.WebView
+import android.widget.FrameLayout
+import android.widget.TextView
+import android.widget.Toast
+
+import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import androidx.webkit.ProfileStore
+import androidx.webkit.ProxyConfig
+import androidx.webkit.ProxyController
+import androidx.webkit.ScriptHandler
+import androidx.webkit.WebViewFeature
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
+import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
+import java.util.Locale
+import java.util.concurrent.Executor
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
+
+class MainActivity : AppCompatActivity(), StexApiService.PanelCallback {
+
+    internal lateinit var mainWebView: WebView
+    internal lateinit var nativeWebView: WebView
+    internal lateinit var browserWebView: WebView
+    internal lateinit var webInterface: WebInterface
+    internal var filePathCallback: ValueCallback<Array<Uri>>? = null
+
+    private var nativeTgFab: View? = null
+
+    internal val mainHandler = Handler(Looper.getMainLooper())
+    @Volatile internal var isBrowserModeOpen = false
+    @Volatile internal var floatingBubbleEnabled = true
+    @Volatile internal var isActivityVisible = false
+    @Volatile internal var lastBubbleTriggerAt = 0L
+
+    private val mobileUserAgents = listOf(
+        "Mozilla/5.0 (Linux; Android 14; SM-S928B Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/126.0.6478.122 Mobile Safari/537.36",
+        "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro Build/AP2A.240605.024; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/125.0.6422.165 Mobile Safari/537.36",
+        "Mozilla/5.0 (Linux; Android 13; SM-A546E Build/TP1A.220624.014; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/124.0.6367.179 Mobile Safari/537.36",
+        "Mozilla/5.0 (Linux; Android 14; CPH2581 Build/UKQ1.230924.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/126.0.6478.71 Mobile Safari/537.36",
+        "Mozilla/5.0 (Linux; Android 13; 22101316G Build/TP1A.220624.014; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/123.0.6312.118 Mobile Safari/537.36",
+        "Mozilla/5.0 (Linux; Android 14; V2309 Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/125.0.6422.113 Mobile Safari/537.36",
+        "Mozilla/5.0 (Linux; Android 13; Pixel 7 Build/TQ3A.230901.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/122.0.6261.119 Mobile Safari/537.36",
+        "Mozilla/5.0 (Linux; Android 14; SM-G998B Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/127.0.6533.64 Mobile Safari/537.36",
+        "Mozilla/5.0 (Linux; Android 13; RMX3710 Build/TP1A.220905.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/124.0.6367.82 Mobile Safari/537.36",
+        "Mozilla/5.0 (Linux; Android 14; 2312DRA50G Build/UKQ1.231003.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/126.0.6478.134 Mobile Safari/537.36"
+    )
+
+    internal var mobileUserAgent = mobileUserAgents.random()
+    internal val desktopUserAgent =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    internal var isDesktopMode = false
+    internal var darkModeEnabled = true
+    internal var lastUrl: String = ""
+
+    @Volatile var lastSavedUid: String = ""
+    @Volatile internal var lastSavedAt: Long = 0L
+    @Volatile internal var nativeWebSuppressed = false
+    @Volatile internal var uiOverlayActive: Boolean = false
+    @Volatile internal var telegramPopupLocked: Boolean = false
+    @Volatile internal var backButtonBlocked: Boolean = false
+    @Volatile internal var pendingTelegramUrl: String = "https://web.telegram.org/a/"
+    @Volatile internal var telegramTaskEnabled: Boolean = true
+    @Volatile internal var telegramPopupAlreadyLoaded: Boolean = false
+
+    @Volatile var autoRegActive: Boolean = false
+    @Volatile var allocatedNumber: String = ""
+    @Volatile var savedPassword: String = ""
+    @Volatile var autoNumberEnabled: Boolean = false
+    @Volatile var current2FAKey: String = ""
+
+    @Volatile var lastGeneratedUsername: String = ""
+    @Volatile var isMetaModeEnabled: Boolean = false
+    lateinit var igAutomation: IgAutomation
+
+    @Volatile internal var activePageName: String = "insta"
+
+    @Volatile var customFirstName: String = ""
+    @Volatile var customLastName: String = ""
+    @Volatile var customPassword: String = ""
+    @Volatile var useCustomData: Boolean = false
+
+    @Volatile var sessionActive: Boolean = false
+    @Volatile var sessionPhone: String = ""
+    @Volatile var sessionPassword: String = ""
+
+    @Volatile internal var cachedUid: String = ""
+    @Volatile internal var cachedCookies: String = ""
+
+    @Volatile internal var page1ProxyEnabled = false
+    @Volatile internal var page2ProxyEnabled = false
+    @Volatile internal var proxyActuallyActive = false
+    @Volatile internal var isProxyToggling = false
+    @Volatile internal var proxyConnectionFailed = false
+    @Volatile internal var isUserTriggeredProxy = false
+
+    @Volatile internal var currentProxyIp = ""
+    @Volatile internal var currentProxyPort = ""
+    @Volatile internal var currentProxyUser = ""
+    @Volatile internal var currentProxyPass = ""
+    internal val proxyExecutor: Executor = Executor { runnable ->
+        if (!isFinishing && !isDestroyed) {
+            try { mainHandler.post(runnable) } catch (_: Exception) {}
+        }
+    }
+    internal var proxyTimeoutRunnable: Runnable? = null
+
+    @Volatile internal var autoLoginEnabled = false
+
+    @Volatile internal var pendingUploadUri: Uri? = null
+    @Volatile internal var uploadConsumed: Boolean = false
+    @Volatile internal var uploadSession: Boolean = false
+    internal var uploadTimeoutRunnable: Runnable? = null
+    internal var nativeFilePathCallback: ValueCallback<Array<Uri>>? = null
+
+    internal var darkScriptHandler: ScriptHandler? = null
+
+    @Volatile internal var automationSoundMuted: Boolean = false
+    @Volatile internal var automationAutoMuteEnabled: Boolean = true
+
+    @Volatile internal var currentMail: String = ""
+    @Volatile internal var currentMailPassword: String = ""
+    @Volatile internal var currentMailStatus: String = "idle"
+    @Volatile internal var currentOtp: String = ""
+    @Volatile internal var currentNumber: String = ""
+    @Volatile internal var currentCountry: String = ""
+    @Volatile internal var activeBoxSource: String = "none"
+
+    @Volatile private var lastOtpReceived: String = ""
+    @Volatile private var lastOtpTime: Long = 0L
+
+    @Volatile internal var fullKeyStore: HashMap<String, String> = HashMap()
+    @Volatile internal var currentMailFullKey: String = ""
+    @Volatile internal var savedHotmailKey: String = ""
+
+    @Volatile internal var cachedRangeValue: String = ""
+    internal var htmlIntegrityCheckRunnable: Runnable? = null
+    @Volatile internal var htmlBootReady = false
+    @Volatile internal var nativeBootReady = false
+    @Volatile internal var bootRevealDone = false
+
+    lateinit var liveChecker: LiveUidChecker
+    internal lateinit var numberChecker: FacebookNumberChecker
+    internal lateinit var hotmailPool: HotmailPool
+
+    private val copyBtnInjector = object : Runnable {
+        override fun run() {
+            if (isFinishing || isDestroyed) return
+            try {
+                if (!uiOverlayActive && !telegramPopupLocked && ::nativeWebView.isInitialized) {
+                    val u = nativeWebView.url ?: ""
+                    if (u.contains("instagram.com") || u.contains("facebook.com")) {
+                        injectFloatingButtons()
+                    }
+                }
+                updateNativeTgFabVisibility()
+            } catch (_: Exception) {}
+            if (!isFinishing && !isDestroyed) {
+                try { mainHandler.postDelayed(this, 2500) } catch (_: Exception) {}
+            }
+        }
+    }
+
+    companion object {
+        internal const val TAG = "InstaRaj"
+        internal const val DEFAULT_TG_LOGIN_URL = "https://web.telegram.org/a/"
+        internal const val FILE_CHOOSER_REQUEST_CODE = 1001
+        internal const val NATIVE_FILE_CHOOSER_REQUEST_CODE = 3004
+        internal const val NOTIF_PERMISSION_REQUEST = 2002
+        internal const val STORAGE_PERMISSION_REQUEST = 2003
+        internal const val OVERLAY_PERMISSION_REQUEST_CODE = 101
+        internal const val BATTERY_OPTIMIZATION_REQUEST_CODE = 102
+        internal const val OTP_CHANNEL_ID = "ir_otp_channel"
+        internal const val OTP_CHANNEL_NAME = "OTP Notifications"
+
+        internal const val HOME_URL = "https://www.instagram.com/"
+        internal const val INSTA_LOGIN_URL = "https://www.instagram.com/accounts/login/?mtn"
+        internal const val FB_HOME_URL = "https://m.facebook.com"
+
+        internal const val THEME_PREFS = "ir_theme_prefs"
+        internal const val KEY_DARK_MODE = "dark_mode"
+        internal const val PW_PREFS = "ir_pw_prefs"
+        internal const val KEY_PW = "autofill_password"
+        internal const val AUTONUM_PREFS = "ir_autonum_prefs"
+        internal const val KEY_AUTONUM = "auto_number_enabled"
+        internal const val RANGE_PREFS = "ir_range_prefs"
+        internal const val KEY_SAVED_RANGE = "saved_range_json"
+        internal const val SHEET_STORE_PREFS = "ir_sheet_store_v2"
+        internal const val KEY_SHEET_JSON = "sheet_json"
+        internal const val CUR_MAIL_PREFS = "ir_current_meta_v1"
+        internal const val KEY_CUR_MAIL = "cur_mail"
+        internal const val KEY_CUR_PWD = "cur_pwd"
+        internal const val KEY_CUR_STATUS = "cur_status"
+        internal const val KEY_CUR_OTP = "cur_otp"
+        internal const val KEY_CUR_NUMBER = "cur_number"
+        internal const val KEY_CUR_COUNTRY = "cur_country"
+        internal const val KEY_CUR_FULL_KEY = "cur_full_key"
+        internal const val KEY_CUR_BOX_SOURCE = "cur_box_source"
+        internal const val KEY_CUR_2FA = "cur_2fa"
+
+        internal const val SHEET_MODE_PREFS = "ir_sheet_mode_v1"
+        internal const val KEY_SHEET_MODE = "current_sheet_mode"
+
+        internal const val PROXY_PREFS = "ir_proxy_prefs"
+        internal const val KEY_PROXY_IP = "proxy_ip"
+        internal const val KEY_PROXY_PORT = "proxy_port"
+        internal const val KEY_PROXY_USER = "proxy_user"
+        internal const val KEY_PROXY_PASS = "proxy_pass"
+        internal const val KEY_PAGE1_PROXY = "page1_proxy_enabled"
+        internal const val KEY_PAGE2_PROXY = "page2_proxy_enabled"
+        internal const val KEY_PROXY_FAILED = "proxy_failed"
+
+        internal const val PREFS_NAME = "ir_prefs"
+        internal const val KEY_P2_MODE = "p2_mode"
+
+        internal const val NAME_MODE_PREFS = "ir_name_mode_prefs"
+        internal const val KEY_NAME_MODE = "name_mode"
+
+        internal const val META_POOL_PREFS = "ir_meta_pool_v1"
+        internal const val KEY_META_POOL_JSON = "meta_pool_json"
+        internal const val SESSION_PREFS = "ir_session_v1"
+        internal const val KEY_SESSION_PHONE = "session_phone"
+        internal const val KEY_SESSION_PWD = "session_pwd"
+        internal const val KEY_SESSION_ACTIVE = "session_active"
+
+        internal const val API_KEY_PREFS = "ir_api_keys"
+
+        internal const val PAGE_STATE_PREFS = "tp_page_state"
+        internal const val KEY_ACTIVE_PAGE = "active_page"
+
+        internal const val RECOVERY_PREFS = "ir_recovery_v1"
+        internal const val KEY_RECOVERY_JSON = "recovery_json"
+        internal const val RECOVERY_TTL_MS = 72L * 3600_000L
+
+        internal const val BG_PREFS = "ir_bg_prefs"
+        internal const val KEY_BATTERY_ASKED = "battery_asked_v2"
+        internal const val KEY_OVERLAY_ASKED = "overlay_asked_v1"
+        internal const val KEY_BUBBLE_ENABLED = "floating_bubble_enabled"
+
+        private val ALLOWED_IG_COOKIE_KEYS = setOf(
+            "datr",
+            "ig_did",
+            "dpr",
+            "wd",
+            "mid",
+            "csrftoken",
+            "ds_user_id",
+            "sessionid",
+            "rur",
+            "ig_nrcb",
+            "shbid",
+            "shbts"
+        )
+
+        private val ORDERED_IG_COOKIE_KEYS = listOf(
+            "datr",
+            "ig_did",
+            "dpr",
+            "wd",
+            "mid",
+            "csrftoken",
+            "ds_user_id",
+            "sessionid",
+            "rur",
+            "ig_nrcb",
+            "shbid",
+            "shbts"
+        )
+    }
+
+    internal fun dpToPx(dp: Float): Int =
+        try {
+            (dp * resources.displayMetrics.density).toInt().coerceAtLeast(1)
+        } catch (_: Exception) {
+            dp.toInt().coerceAtLeast(1)
+        }
+
+    internal fun esc(s: String): String =
+        s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "")
+
+    internal fun quote(s: String): String = "\"" + esc(s) + "\""
+
+    internal fun toast(msg: String) {
+        if (isFinishing || isDestroyed) return
+        runOnUiThread {
+            if (!isFinishing && !isDestroyed) {
+                try { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() } catch (_: Exception) {}
+            }
+        }
+    }
+
+    internal fun copyToClipboard(text: String, label: String = "Copied") {
+        try {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+            cm.setPrimaryClip(ClipData.newPlainText("InstaRaj", text))
+            toast(label)
+        } catch (_: Exception) {}
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  FLOATING BUBBLE STATE & BACKGROUND KEEP-ALIVE
+    // ═══════════════════════════════════════════════════════════
+    internal fun restoreFloatingBubblePref() {
+        try {
+            floatingBubbleEnabled = getSharedPreferences(BG_PREFS, MODE_PRIVATE)
+                .getBoolean(KEY_BUBBLE_ENABLED, true)
+        } catch (_: Exception) {
+            floatingBubbleEnabled = true
+        }
+    }
+
+    fun setFloatingBubbleEnabled(enabled: Boolean) {
+        floatingBubbleEnabled = enabled
+        try {
+            getSharedPreferences(BG_PREFS, MODE_PRIVATE)
+                .edit().putBoolean(KEY_BUBBLE_ENABLED, enabled).apply()
+        } catch (_: Exception) {}
+
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            try {
+                if (!enabled) {
+                    try {
+                        stopService(Intent(this, FloatingBubbleService::class.java))
+                    } catch (_: Exception) {}
+                } else if (isActivityVisible) {
+                    startBubbleServiceOnly()
+                }
+                toast("Overlay Bubble: " + if (enabled) "ON" else "OFF")
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun isFloatingBubbleEnabled(): Boolean = floatingBubbleEnabled
+
+    internal fun startBubbleServiceOnly(): Boolean {
+        if (!floatingBubbleEnabled || isFinishing || isDestroyed) return false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            return false
+        }
+        val now = System.currentTimeMillis()
+        if (now - lastBubbleTriggerAt < 800L) return true
+        lastBubbleTriggerAt = now
+        return try {
+            val intent = Intent(this, FloatingBubbleService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ContextCompat.startForegroundService(this, intent)
+            } else {
+                startService(intent)
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "startBubbleServiceOnly blocked by OS: ${e.message}")
+            try {
+                startService(Intent(this, FloatingBubbleService::class.java))
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  TELEGRAM OVERLAY, LOCK & ZERO-REFRESH RESTORE
+    // ═══════════════════════════════════════════════════════════
+    internal fun setTelegramPopupLockState(locked: Boolean) {
+        telegramPopupLocked = locked
+        backButtonBlocked = locked
+        if (locked) {
+            uiOverlayActive = true
+            nativeWebSuppressed = true
+            try {
+                if (::nativeWebView.isInitialized) nativeWebView.visibility = View.INVISIBLE
+            } catch (_: Exception) {}
+        }
+        updateNativeTgFabVisibility()
+    }
+
+    internal fun ensureTelegramFloatingFab(): View? {
+        try {
+            if (isFinishing || isDestroyed || !::mainWebView.isInitialized) return null
+            val parent = mainWebView.parent as? ViewGroup ?: return null
+
+            if (nativeTgFab == null) {
+                val fab = FrameLayout(this).apply {
+                    setBackgroundResource(android.R.color.transparent)
+                    contentDescription = "Telegram Login"
+                }
+
+                val circle = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    colors = intArrayOf(
+                        Color.parseColor("#38bdf8"),
+                        Color.parseColor("#0284c7")
+                    )
+                    gradientType = GradientDrawable.LINEAR_GRADIENT
+                    setStroke(dpToPx(2f), Color.WHITE)
+                }
+                fab.background = circle
+                fab.elevation = dpToPx(8f).toFloat()
+
+                val icon = TextView(this).apply {
+                    text = "✈"
+                    setTextColor(Color.WHITE)
+                    textSize = 20f
+                    gravity = Gravity.CENTER
+                }
+                fab.addView(
+                    icon,
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                )
+
+                val sizePx = dpToPx(42f)
+                val marginPx = dpToPx(14f)
+                val bottomPx = dpToPx(68f)
+
+                val lp = FrameLayout.LayoutParams(sizePx, sizePx).apply {
+                    leftMargin = marginPx
+                    bottomMargin = bottomPx
+                    gravity = Gravity.BOTTOM or Gravity.START
+                }
+
+                fab.layoutParams = lp
+                fab.setOnClickListener {
+                    openTelegramOverlayInHtml(DEFAULT_TG_LOGIN_URL)
+                }
+
+                parent.addView(fab)
+                nativeTgFab = fab
+            }
+
+            nativeTgFab?.bringToFront()
+            updateNativeTgFabVisibility()
+            return nativeTgFab
+        } catch (e: Exception) {
+            Log.e(TAG, "ensureTelegramFloatingFab: ${e.message}")
+            return null
+        }
+    }
+
+    internal fun bringTelegramFabToFront() {
+        if (isFinishing || isDestroyed) return
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            try {
+                val fab = nativeTgFab ?: ensureTelegramFloatingFab()
+                fab?.bringToFront()
+            } catch (_: Exception) {}
+        }
+    }
+
+    internal fun updateNativeTgFabVisibility() {
+        if (isFinishing || isDestroyed) return
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            try {
+                val fab = nativeTgFab ?: ensureTelegramFloatingFab() ?: return@runOnUiThread
+                val shouldShow = !uiOverlayActive && !telegramPopupLocked && !isBrowserModeOpen
+                fab.visibility = if (shouldShow) View.VISIBLE else View.GONE
+                fab.alpha = if (telegramTaskEnabled) 1.0f else 0.5f
+                if (shouldShow) {
+                    fab.bringToFront()
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    internal fun enforceTelegramButtonOnRight() {
+        try {
+            if (isFinishing || isDestroyed || !::mainWebView.isInitialized) return
+            val js = """
+                (function(){
+                    try {
+                        var fab = document.getElementById('tgFixedFab');
+                        if (fab) {
+                            fab.style.setProperty('display', 'none', 'important');
+                        }
+                    } catch(e){}
+                })();
+            """.trimIndent()
+            mainWebView.evaluateJavascript(js, null)
+        } catch (_: Exception) {}
+    }
+
+    internal fun openTelegramOverlayInHtml(targetUrl: String? = null) {
+        if (isFinishing || isDestroyed) return
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            try {
+                val resolvedUrl = if (!targetUrl.isNullOrBlank() && targetUrl.contains("telegram.org")) {
+                    targetUrl.trim()
+                } else if (pendingTelegramUrl.isNotBlank() && pendingTelegramUrl.contains("telegram.org")) {
+                    pendingTelegramUrl.trim()
+                } else {
+                    DEFAULT_TG_LOGIN_URL
+                }
+                pendingTelegramUrl = resolvedUrl
+                uiOverlayActive = true
+                nativeWebSuppressed = true
+                if (::nativeWebView.isInitialized) nativeWebView.visibility = View.INVISIBLE
+                updateNativeTgFabVisibility()
+
+                if (::mainWebView.isInitialized) {
+                    mainWebView.evaluateJavascript(
+                        "(function(){try{" +
+                        "if(window.TP&&typeof window.TP.openTelegramPopup==='function'){window.TP.openTelegramPopup('${esc(resolvedUrl)}');return;}" +
+                        "var s=document.getElementById('tgSheetBackdrop');if(s){s.classList.add('open');}" +
+                        "var p=document.getElementById('tgPopupBackdrop');if(p){p.classList.add('open');}" +
+                        "}catch(e){}})();",
+                        null
+                    )
+                }
+
+                telegramPopupAlreadyLoaded = true
+                loadTelegramPopupUrl(resolvedUrl)
+            } catch (e: Exception) {
+                Log.e(TAG, "openTelegramOverlayInHtml error: ${e.message}")
+            }
+        }
+    }
+
+    internal fun closeTelegramOverlayAndRestoreInsta() {
+        if (isFinishing || isDestroyed) return
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            try {
+                try { CookieManager.getInstance().flush() } catch (_: Exception) {}
+                uiOverlayActive = false
+                telegramPopupLocked = false
+                backButtonBlocked = false
+                nativeWebSuppressed = false
+                hideTelegramPopupWebViewIfClosed()
+
+                if (!isBrowserModeOpen && ::nativeWebView.isInitialized) {
+                    nativeWebView.visibility = View.VISIBLE
+                    nativeWebView.translationX = 0f
+                    nativeWebView.translationY = 0f
+                }
+                bringTelegramFabToFront()
+            } catch (_: Exception) {}
+        }
+    }
+
+    internal fun triggerHtmlTelegramTaskHook() {
+        try {
+            if (isFinishing || isDestroyed || !::mainWebView.isInitialized) return
+            val js = """
+                (function(){
+                    try {
+                        if (window.TP) {
+                            if (typeof window.TP.triggerTelegramBotTask === 'function') {
+                                window.TP.triggerTelegramBotTask();
+                            } else if (typeof window.TP.startBotTaskInTelegram === 'function') {
+                                window.TP.startBotTaskInTelegram();
+                            }
+                        }
+                    } catch(e){}
+                })();
+            """.trimIndent()
+            mainWebView.evaluateJavascript(js, null)
+        } catch (_: Exception) {}
+    }
+
+    internal fun rotateUserAgent(): String {
+        val nextUa = mobileUserAgents.filter { it != mobileUserAgent }.randomOrNull()
+            ?: mobileUserAgents.random()
+        mobileUserAgent = nextUa
+        try {
+            if (::nativeWebView.isInitialized) {
+                nativeWebView.settings.userAgentString = if (isDesktopMode) desktopUserAgent else mobileUserAgent
+            }
+            if (::browserWebView.isInitialized) {
+                browserWebView.settings.userAgentString = if (isDesktopMode) desktopUserAgent else mobileUserAgent
+            }
+        } catch (_: Exception) {}
+        return nextUa
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  PAGE STATE HELPERS
+    // ═══════════════════════════════════════════════════════════
+    internal fun setActivePageInternal(page: String) {
+        activePageName = if (page == "fb") "fb" else "insta"
+        try {
+            getSharedPreferences(PAGE_STATE_PREFS, MODE_PRIVATE)
+                .edit().putString(KEY_ACTIVE_PAGE, activePageName).apply()
+        } catch (_: Exception) {}
+    }
+
+    internal fun getActivePageInternal(): String = activePageName
+
+    internal fun restoreActivePage() {
+        try {
+            activePageName = getSharedPreferences(PAGE_STATE_PREFS, MODE_PRIVATE)
+                .getString(KEY_ACTIVE_PAGE, "insta") ?: "insta"
+        } catch (_: Exception) { activePageName = "insta" }
+    }
+
+    internal fun handleNativePageFinished(url: String) {
+        if (isFinishing || isDestroyed) return
+        mainHandler.post {
+            if (isFinishing || isDestroyed) return@post
+            try {
+                if (url.isNotBlank() && url != "about:blank") {
+                    lastUrl = url
+                }
+                val page = if (url.contains("facebook.com")) "fb" else "insta"
+                if (page != activePageName) {
+                    activePageName = page
+                    try {
+                        getSharedPreferences(PAGE_STATE_PREFS, MODE_PRIVATE)
+                            .edit().putString(KEY_ACTIVE_PAGE, page).apply()
+                    } catch (_: Exception) {}
+                }
+                updateNativeTgFabVisibility()
+            } catch (_: Exception) {}
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  FLOATING BUBBLE & BACKGROUND PERMISSIONS
+    // ═══════════════════════════════════════════════════════════
+    fun showFloatingBubble(minimizeApp: Boolean = true) {
+        if (isFinishing || isDestroyed) return
+        if (!floatingBubbleEnabled && minimizeApp) {
+            try { moveTaskToBack(true) } catch (_: Exception) {}
+            return
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            if (isActivityVisible) {
+                try {
+                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+                    @Suppress("DEPRECATION")
+                    startActivityForResult(intent, OVERLAY_PERMISSION_REQUEST_CODE)
+                    toast("Please allow 'Display over other apps' permission")
+                } catch (_: Exception) {}
+            }
+            return
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && minimizeApp && isActivityVisible) {
+            try {
+                val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                if (pm != null && !pm.isIgnoringBatteryOptimizations(packageName)) {
+                    try {
+                        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                        intent.data = Uri.parse("package:$packageName")
+                        @Suppress("DEPRECATION")
+                        startActivityForResult(intent, BATTERY_OPTIMIZATION_REQUEST_CODE)
+                        toast("Please allow background running for best performance")
+                        return
+                    } catch (_: Exception) {
+                        try {
+                            startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                        } catch (_: Exception) {}
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        if (minimizeApp) {
+            startBubbleAndMinimize()
+        } else {
+            startBubbleServiceOnly()
+        }
+    }
+
+    private fun startBubbleAndMinimize() {
+        try {
+            startBubbleServiceOnly()
+            moveTaskToBack(true)
+        } catch (e: Exception) {
+            toast("Bubble failed: ${e.message}")
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  REMOVE DUPLICATE FLOATING BUTTONS IN WEBVIEW
+    // ═══════════════════════════════════════════════════════════
+    internal fun injectFloatingButtons() {
+        try {
+            if (isFinishing || isDestroyed || !::nativeWebView.isInitialized) return
+            val js = """
+                (function(){
+                    try {
+                        var oldBtn = document.getElementById('__ir_copy_user_btn');
+                        if (oldBtn && oldBtn.parentNode) oldBtn.parentNode.removeChild(oldBtn);
+                    } catch(e){}
+                })();
+            """.trimIndent()
+            nativeWebView.evaluateJavascript(js, null)
+        } catch (_: Exception) {}
+    }
+
+    fun copyCurrentUsername() {
+        if (lastGeneratedUsername.isNotBlank()) {
+            copyToClipboard(lastGeneratedUsername, "Username: $lastGeneratedUsername")
+            return
+        }
+        try {
+            if (!::nativeWebView.isInitialized) return
+            val js = "(function(){try{var i=document.querySelector('input[name=\"username\"]')" +
+                "||document.querySelector('input[name=\"email\"]')" +
+                "||document.querySelector('input[autocomplete=\"username\"]');" +
+                "return i?(i.value||''):'';}catch(e){return '';}})();"
+            nativeWebView.evaluateJavascript(js) { result ->
+                val u = (result ?: "").trim().trim('"')
+                if (u.isNotBlank()) {
+                    lastGeneratedUsername = u
+                    copyToClipboard(u, "Username: $u")
+                } else {
+                    toast("Username empty")
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    fun fetchLastGeneratedUsername(): String = lastGeneratedUsername
+
+    internal fun clearLoginFields() {
+        try {
+            if (!::nativeWebView.isInitialized) return
+            val js = "(function(){try{var u=document.querySelector('input[name=\"username\"]');var p=document.querySelector('input[name=\"password\"]');if(u)u.value='';if(p)p.value='';}catch(e){}})();"
+            nativeWebView.evaluateJavascript(js, null)
+        } catch (_: Exception) {}
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  META POOL
+    // ═══════════════════════════════════════════════════════════
+    internal fun getMetaPool(): MutableList<MetaAccount> {
+        return try {
+            val raw = getSharedPreferences(META_POOL_PREFS, MODE_PRIVATE)
+                .getString(KEY_META_POOL_JSON, "[]") ?: "[]"
+            val arr = JSONArray(raw)
+            val list = mutableListOf<MetaAccount>()
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                list.add(MetaAccount(
+                    phone = o.optString("phone", ""),
+                    password = o.optString("password", ""),
+                    twofa = o.optString("twofa", ""),
+                    status = o.optString("status", "fresh"),
+                    addedAt = o.optLong("addedAt", 0L)
+                ))
+            }
+            list
+        } catch (_: Exception) { mutableListOf() }
+    }
+
+    internal fun saveMetaPool(list: MutableList<MetaAccount>) {
+        try {
+            val arr = JSONArray()
+            for (m in list) {
+                arr.put(JSONObject().apply {
+                    put("phone", m.phone)
+                    put("password", m.password)
+                    put("twofa", m.twofa)
+                    put("status", m.status)
+                    put("addedAt", m.addedAt)
+                })
+            }
+            getSharedPreferences(META_POOL_PREFS, MODE_PRIVATE)
+                .edit().putString(KEY_META_POOL_JSON, arr.toString()).apply()
+        } catch (_: Exception) {}
+    }
+
+    fun addMetaPoolNative(text: String): String {
+        return try {
+            val pool = getMetaPool()
+            text.lines().forEach { line ->
+                val parts = line.trim().split(Regex("[\\s,|]+")).filter { it.isNotBlank() }
+                if (parts.size < 2) return@forEach
+                val phone = parts[0]
+                if (pool.any { it.phone == phone }) return@forEach
+                pool.add(MetaAccount(
+                    phone = phone,
+                    password = parts[1],
+                    twofa = if (parts.size >= 3) parts[2] else "",
+                    status = "fresh",
+                    addedAt = System.currentTimeMillis()
+                ))
+            }
+            saveMetaPool(pool)
+            getMetaStatsNative()
+        } catch (_: Exception) {
+            getMetaStatsNative()
+        }
+    }
+
+    fun saveMetaPoolJsonNative(jsonStr: String): Boolean {
+        return try {
+            val arr = JSONArray(jsonStr)
+            val pool = mutableListOf<MetaAccount>()
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                pool.add(MetaAccount(
+                    phone = o.optString("phone", ""),
+                    password = o.optString("password", ""),
+                    twofa = o.optString("twofa", ""),
+                    status = o.optString("status", "fresh"),
+                    addedAt = o.optLong("addedAt", System.currentTimeMillis())
+                ))
+            }
+            saveMetaPool(pool)
+            true
+        } catch (_: Exception) { false }
+    }
+
+    fun saveMetaPoolNative(text: String): String = addMetaPoolNative(text)
+
+    fun getFreshMetaNative(): String {
+        return try {
+            val pool = getMetaPool()
+            val fresh = pool.firstOrNull { it.status == "fresh" } ?: return "{}"
+            fresh.status = "used"
+            saveMetaPool(pool)
+            currentNumber = fresh.phone
+            currentMailPassword = fresh.password
+            if (fresh.password.isNotBlank()) savePassword(fresh.password)
+            current2FAKey = fresh.twofa
+            currentMail = ""
+            activeBoxSource = "meta"
+            saveCurrentMail()
+            JSONObject().apply {
+                put("phone", fresh.phone)
+                put("password", fresh.password)
+                put("twofa", fresh.twofa)
+            }.toString()
+        } catch (_: Exception) { "{}" }
+    }
+
+    fun peekFreshMetaNative(): String {
+        return try {
+            val fresh = getMetaPool().firstOrNull { it.status == "fresh" } ?: return "{}"
+            JSONObject().apply {
+                put("phone", fresh.phone)
+                put("password", fresh.password)
+                put("twofa", fresh.twofa)
+            }.toString()
+        } catch (_: Exception) { "{}" }
+    }
+
+    fun getMetaStatsNative(): String {
+        return try {
+            val pool = getMetaPool()
+            JSONObject().apply {
+                put("total", pool.size)
+                put("fresh", pool.count { it.status == "fresh" })
+                put("used", pool.count { it.status == "used" })
+                put("broken", pool.count { it.status == "broken" })
+            }.toString()
+        } catch (_: Exception) { "{\"total\":0,\"fresh\":0,\"used\":0,\"broken\":0}" }
+    }
+
+    fun getMetaListNative(): String {
+        return try {
+            val arr = JSONArray()
+            for (m in getMetaPool()) {
+                arr.put(JSONObject().apply {
+                    put("phone", m.phone)
+                    put("password", m.password)
+                    put("twofa", m.twofa)
+                    put("status", m.status)
+                    put("addedAt", m.addedAt)
+                })
+            }
+            arr.toString()
+        } catch (_: Exception) { "[]" }
+    }
+
+    fun markMetaBrokenNative(phone: String): Boolean {
+        return try {
+            val p = getMetaPool()
+            p.firstOrNull { it.phone == phone }?.status = "broken"
+            saveMetaPool(p)
+            true
+        } catch (_: Exception) { false }
+    }
+
+    fun clearMetaPoolNative(): Boolean {
+        return try { saveMetaPool(mutableListOf()); true } catch (_: Exception) { false }
+    }
+
+    fun resetMetaPoolNative(): Boolean {
+        return try {
+            val p = getMetaPool()
+            p.forEach { it.status = "fresh" }
+            saveMetaPool(p)
+            true
+        } catch (_: Exception) { false }
+    }
+
+    fun removeMetaNative(phone: String): Boolean {
+        return try {
+            val p = getMetaPool()
+            val r = p.removeAll { it.phone == phone }
+            saveMetaPool(p)
+            r
+        } catch (_: Exception) { false }
+    }
+
+    fun markMetaUsedNative(phone: String): Boolean {
+        return try {
+            val p = getMetaPool()
+            p.firstOrNull { it.phone == phone }?.status = "used"
+            saveMetaPool(p)
+            true
+        } catch (_: Exception) { false }
+    }
+
+    fun markMetaFreshNative(phone: String): Boolean {
+        return try {
+            val p = getMetaPool()
+            p.firstOrNull { it.phone == phone }?.status = "fresh"
+            saveMetaPool(p)
+            true
+        } catch (_: Exception) { false }
+    }
+
+    fun isMetaFreshNative(phone: String): Boolean =
+        try { getMetaPool().firstOrNull { it.phone == phone }?.status == "fresh" } catch (_: Exception) { false }
+
+    fun getMetaPasswordNative(phone: String): String =
+        try { getMetaPool().firstOrNull { it.phone == phone }?.password ?: "" } catch (_: Exception) { "" }
+
+    fun getMeta2FANative(phone: String): String =
+        try { getMetaPool().firstOrNull { it.phone == phone }?.twofa ?: "" } catch (_: Exception) { "" }
+
+    fun saveMeta2FANative(phone: String, secret: String): Boolean {
+        return try {
+            val p = getMetaPool()
+            val acc = p.firstOrNull { it.phone == phone } ?: return false
+            acc.twofa = secret
+            saveMetaPool(p)
+            if (currentNumber == phone) { current2FAKey = secret; saveCurrentMail() }
+            true
+        } catch (_: Exception) { false }
+    }
+
+    fun getCurrentMetaPhone(): String = currentNumber
+    fun getCurrentMetaPassword(): String = currentMailPassword
+    fun getCurrentMeta2FA(): String = current2FAKey
+
+    // ═══════════════════════════════════════════════════════════
+    //  INSTAGRAM AUTOMATION
+    // ═══════════════════════════════════════════════════════════
+    private fun prepareNativeWebForAutomation() {
+        try {
+            if (isFinishing || isDestroyed || !::nativeWebView.isInitialized) return
+            uiOverlayActive = false
+            telegramPopupLocked = false
+            backButtonBlocked = false
+            nativeWebSuppressed = false
+            nativeWebView.visibility = View.VISIBLE
+            nativeWebView.translationX = 0f
+            nativeWebView.translationY = 0f
+            nativeWebView.bringToFront()
+            updateNativeTgFabVisibility()
+        } catch (_: Exception) {}
+    }
+
+    fun startIgAutomation(phone: String, pass: String) {
+        if (isFinishing || isDestroyed) return
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            try {
+                currentNumber = phone
+                if (pass.isNotBlank()) {
+                    currentMailPassword = pass
+                    savePassword(pass)
+                }
+                if (current2FAKey.isBlank() && phone.isNotBlank()) {
+                    val pool2fa = getMeta2FANative(phone)
+                    if (pool2fa.isNotBlank()) current2FAKey = pool2fa
+                }
+                saveCurrentMail()
+                autoRegActive = true
+                prepareNativeWebForAutomation()
+                ensureInstagramLoginPage()
+                try {
+                    if (::igAutomation.isInitialized) {
+                        igAutomation.startAutomation(phone, pass, current2FAKey)
+                    }
+                } catch (_: Exception) {}
+                fillInstagramLogin(phone, pass)
+                toast("▶️ IG login: $phone")
+            } catch (e: Exception) {
+                Log.e(TAG, "startIgAutomation error: ${e.message}")
+            }
+        }
+    }
+
+    fun startIgAutomationCustom(user: String, pass: String) {
+        if (isFinishing || isDestroyed) return
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            try {
+                customFirstName = user
+                customPassword = pass
+                if (pass.isNotBlank()) {
+                    currentMailPassword = pass
+                    savePassword(pass)
+                }
+                useCustomData = true
+                startIgAutomation(currentNumber, pass)
+            } catch (_: Exception) {}
+        }
+    }
+
+    internal fun ensureInstagramLoginPage() {
+        try {
+            if (isFinishing || isDestroyed || !::nativeWebView.isInitialized) return
+            val url = nativeWebView.url ?: ""
+            if (url.isBlank() || url == "about:blank" || !url.contains("instagram.com")) {
+                nativeWebView.loadUrl(INSTA_LOGIN_URL)
+            }
+        } catch (_: Exception) {}
+    }
+
+    fun ensureInstagramLoginPagePublic() { ensureInstagramLoginPage() }
+
+    private fun fillInstagramLogin(phone: String, pass: String) {
+        if (isFinishing || isDestroyed || !::nativeWebView.isInitialized) return
+        try {
+            if (pass.isNotBlank()) {
+                currentMailPassword = pass
+                savePassword(pass)
+            }
+            val sPhone = phone.replace("\\", "\\\\").replace("'", "\\'").replace("\"", "\\\"")
+            val sPass = pass.replace("\\", "\\\\").replace("'", "\\'").replace("\"", "\\\"")
+            val js = """
+                (function(){
+                    try{
+                        var u=document.querySelector('input[name="username"]')||document.querySelector('input[name="email"]')||document.querySelector('input[type="text"]');
+                        var p=document.querySelector('input[name="password"]')||document.querySelector('input[type="password"]');
+                        var s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
+                        if(u){s.call(u,'$sPhone');u.dispatchEvent(new Event('input',{bubbles:true}));u.dispatchEvent(new Event('change',{bubbles:true}));}
+                        if(p){s.call(p,'$sPass');p.dispatchEvent(new Event('input',{bubbles:true}));p.dispatchEvent(new Event('change',{bubbles:true}));}
+                    }catch(e){}
+                })();
+            """.trimIndent()
+            mainHandler.postDelayed({
+                if (!isFinishing && !isDestroyed && ::nativeWebView.isInitialized) {
+                    try { nativeWebView.evaluateJavascript(js, null) } catch (_: Exception) {}
+                }
+            }, 400)
+            mainHandler.postDelayed({
+                if (!isFinishing && !isDestroyed && ::nativeWebView.isInitialized) {
+                    try { nativeWebView.evaluateJavascript(js, null) } catch (_: Exception) {}
+                }
+            }, 1800)
+        } catch (_: Exception) {}
+    }
+
+    fun getInstagramCookiesPublic(): String {
+        return try {
+            val cm = CookieManager.getInstance()
+            try { cm.flush() } catch (_: Exception) {}
+
+            val igDomains = listOf(
+                "https://www.instagram.com/",
+                "https://www.instagram.com",
+                "https://m.instagram.com/"
+            )
+
+            val cookieMap = LinkedHashMap<String, String>()
+            for (domain in igDomains) {
+                val raw = cm.getCookie(domain) ?: continue
+                raw.split(";").forEach { part ->
+                    val trimmed = part.trim()
+                    val eqIdx = trimmed.indexOf('=')
+                    if (eqIdx > 0) {
+                        val key = trimmed.substring(0, eqIdx).trim()
+                        val value = trimmed.substring(eqIdx + 1).trim()
+                        if (
+                            key in ALLOWED_IG_COOKIE_KEYS &&
+                            value.isNotEmpty() &&
+                            value != "\"\"" &&
+                            !value.equals("null", ignoreCase = true) &&
+                            !value.equals("undefined", ignoreCase = true)
+                        ) {
+                            cookieMap[key] = value
+                        }
+                    }
+                }
+            }
+
+            if (cookieMap.isEmpty()) return ""
+
+            val ordered = LinkedHashMap<String, String>()
+            for (k in ORDERED_IG_COOKIE_KEYS) {
+                cookieMap[k]?.let { ordered[k] = it }
+            }
+
+            ordered.entries.joinToString("; ") { "${it.key}=${it.value}" }
+        } catch (e: Exception) {
+            Log.e(TAG, "getInstagramCookiesPublic error: ${e.message}")
+            ""
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  SESSION
+    // ═══════════════════════════════════════════════════════════
+    fun saveSessionPublic() {
+        try {
+            getSharedPreferences(SESSION_PREFS, MODE_PRIVATE).edit()
+                .putString(KEY_SESSION_PHONE, sessionPhone)
+                .putString(KEY_SESSION_PWD, sessionPassword)
+                .putBoolean(KEY_SESSION_ACTIVE, sessionActive).apply()
+        } catch (_: Exception) {}
+    }
+
+    fun clearSessionStatePublic() {
+        sessionActive = false; sessionPhone = ""; sessionPassword = ""
+        try {
+            getSharedPreferences(SESSION_PREFS, MODE_PRIVATE).edit()
+                .remove(KEY_SESSION_PHONE).remove(KEY_SESSION_PWD).remove(KEY_SESSION_ACTIVE).apply()
+        } catch (_: Exception) {}
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  HELPERS
+    // ═══════════════════════════════════════════════════════════
+    fun getCurrentPhone(): String = currentNumber.ifBlank { allocatedNumber }
+    fun isAutoNumberEnabled(): Boolean = autoNumberEnabled
+
+    fun updateAutoNumberEnabled(enabled: Boolean) {
+        autoNumberEnabled = enabled
+        try { getSharedPreferences(AUTONUM_PREFS, MODE_PRIVATE).edit().putBoolean(KEY_AUTONUM, enabled).apply() }
+        catch (_: Exception) {}
+    }
+
+    fun readAutofillPassword(): String = currentMailPassword.ifBlank { savedPassword }
+    fun setAutofillPassword(pwd: String) {
+        if (pwd.isNotBlank()) currentMailPassword = pwd
+        savePassword(pwd)
+    }
+    fun flushCookiesPublic() { try { CookieManager.getInstance().flush() } catch (_: Exception) {} }
+
+    fun copyCurrentID() {
+        try {
+            val url = if (::nativeWebView.isInitialized) (nativeWebView.url ?: "") else ""
+            if (url.contains("instagram") && lastGeneratedUsername.isNotBlank()) {
+                copyToClipboard(lastGeneratedUsername, "Username: $lastGeneratedUsername")
+                return
+            }
+            val uid = getUidFromCookiesPublic()
+            if (uid.isNotBlank()) copyToClipboard(uid, "UID: $uid")
+            else toast("No UID found")
+        } catch (_: Exception) {}
+    }
+
+    fun copyCurrentCookiesInternal() {
+        try {
+            val ck = getInstagramCookiesPublic()
+            if (ck.isBlank()) {
+                toast("No Instagram cookies found")
+                return
+            }
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+            cm.setPrimaryClip(ClipData.newPlainText("Instagram Cookies", ck))
+
+            if (ck.contains("sessionid=")) {
+                toast("✓ IG Cookies Copied!")
+            } else {
+                toast("⚠ sessionid পাওয়া যায়নি — আগে IG লগইন করুন")
+            }
+        } catch (_: Exception) {}
+    }
+
+    fun copyFullCredentials() { copyToClipboard("${currentNumber}:${currentMailPassword}", "Creds Copied") }
+    fun copyCookies()         { copyCurrentCookiesInternal() }
+    fun setOtpFromHtml(otp: String) { currentOtp = otp }
+
+    fun generate2FA(): String = generate2FACodeFromKey()
+    fun generate2FACodeFromKey(): String {
+        val code = generateTotp(current2FAKey)
+        if (code.isNotBlank()) copyToClipboard(code, "2FA: $code") else toast("No 2FA key set")
+        return code
+    }
+
+    fun generate2FACodeFromKeyInput(rawKey: String): String {
+        val clean = rawKey.trim()
+        if (clean.isBlank()) return ""
+        current2FAKey = clean
+        saveCurrentMail()
+        return generateTotp(clean)
+    }
+
+    fun startTwoFactorAutomationPublic() { startTwoFactorAutomation() }
+
+    fun startTwoFactorAutomation() {
+        try {
+            if (!::nativeWebView.isInitialized) return
+            val code = generateTotp(current2FAKey)
+            if (code.isBlank()) { toast("No 2FA key"); return }
+            val js = """
+                (function(){
+                    try {
+                        var inp = document.querySelector('input[name="verificationCode"]')
+                               || document.querySelector('input[name="code"]')
+                               || document.querySelector('input[autocomplete="one-time-code"]')
+                               || document.querySelector('input[name="security_code"]')
+                               || document.querySelector('input[type="tel"]');
+                        if (inp) {
+                            var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
+                            setter.call(inp, '$code');
+                            inp.dispatchEvent(new Event('input', {bubbles:true}));
+                            inp.dispatchEvent(new Event('change', {bubbles:true}));
+                        }
+                    } catch(e){}
+                })();
+            """.trimIndent()
+            mainHandler.postDelayed({
+                if (!isFinishing && !isDestroyed && ::nativeWebView.isInitialized) {
+                    try { nativeWebView.evaluateJavascript(js, null) } catch (_: Exception) {}
+                }
+            }, 800)
+            mainHandler.postDelayed({
+                if (!isFinishing && !isDestroyed && ::nativeWebView.isInitialized) {
+                    try { nativeWebView.evaluateJavascript(js, null) } catch (_: Exception) {}
+                }
+            }, 2000)
+            copyToClipboard(code, "2FA Code: $code")
+        } catch (_: Exception) {}
+    }
+
+    fun stopTwoFactorAutomationPublic() {}
+
+    fun getNameModePublic(): String =
+        try { getSharedPreferences(NAME_MODE_PREFS, MODE_PRIVATE).getString(KEY_NAME_MODE, "") ?: "" }
+        catch (_: Exception) { "" }
+
+    fun setNameModePublic(mode: String) {
+        try { getSharedPreferences(NAME_MODE_PREFS, MODE_PRIVATE).edit().putString(KEY_NAME_MODE, mode).apply() }
+        catch (_: Exception) {}
+    }
+
+    // Hotmail stubs
+    fun saveHotmailKey(key: String) { savedHotmailKey = key }
+    fun fetchMailWithKey(key: String, email: String) {}
+    fun addHotmailPoolNative(text: String): String = "{\"success\":true,\"added\":0,\"fresh\":0,\"total\":0}"
+    fun addHotmailPoolDirectNative(text: String): String = addHotmailPoolNative(text)
+    fun saveHotmailPoolNative(text: String): String = addHotmailPoolNative(text)
+    fun checkHotmailBatchNative(text: String) {}
+    fun getMailNative() {}
+    fun getFreshHotmailNative(): String = ""
+    fun peekFreshHotmailNative(): String = ""
+    fun getHotmailStatsNative(): String = "{\"total\":0,\"fresh\":0,\"used\":0}"
+    fun getHotmailListNative(): String = "[]"
+    fun clearHotmailPoolNative(): Boolean = true
+    fun resetHotmailPoolNative(): Boolean = true
+    fun removeHotmailNative(email: String): Boolean = true
+    fun markHotmailUsedNative(email: String): Boolean = true
+    fun markHotmailFreshNative(email: String): Boolean = true
+    fun isHotmailFreshNative(email: String): Boolean = false
+    fun getHotmailPasswordNative(email: String): String = ""
+    fun fetchHotmailOtpNative(email: String) {}
+    fun fetchHotmailOtpFreshNative() {}
+    fun testHotmailCredsNative(email: String) {}
+    fun checkNewMailNative() {}
+
+    fun setFullKeyFromUi(key: String) { currentMailFullKey = key }
+    fun pushFullKeyToHtmlPublic(mail: String, key: String) {
+        currentMail = mail; currentMailFullKey = key
+    }
+
+    fun triggerAccountCreatedUi() {}
+    fun triggerHomeClick() {}
+
+    fun getApiKeyPublic(): String {
+        return try {
+            getSharedPreferences(API_KEY_PREFS, MODE_PRIVATE).getString("stex", "") ?: ""
+        } catch (_: Exception) { "" }
+    }
+
+    fun saveApiKeyPublic(service: String, key: String) {
+        try {
+            getSharedPreferences(API_KEY_PREFS, MODE_PRIVATE).edit().putString(service, key).apply()
+            toast("API key saved: $service")
+        } catch (_: Exception) {}
+    }
+
+    fun forceRefreshCredsPublic() {}
+    fun openSidebar() {}
+    fun closeSidebar() {}
+    fun isAutomationAutoMuteEnabled(): Boolean = automationAutoMuteEnabled
+    fun setAutomationAutoMute(enabled: Boolean) { automationAutoMuteEnabled = enabled }
+    fun isAutomationSoundMuted(): Boolean = automationSoundMuted
+    fun forceMuteNow()   { automationSoundMuted = true }
+    fun forceUnmuteNow() { automationSoundMuted = false }
+    fun pickMultiplePhotos() {}
+    fun autoUploadPhoto() {}
+    fun autoProfilePictureUrl() {}
+    fun openDongvanChecker(accountLine: String) {}
+    fun stopDongvanOtpPoll() {}
+
+    private fun clearDomainCookies(cm: CookieManager, urls: List<String>) {
+        urls.forEach { baseUrl ->
+            try {
+                val raw = cm.getCookie(baseUrl) ?: return@forEach
+                raw.split(";").forEach { part ->
+                    val name = part.substringBefore("=").trim()
+                    if (name.isNotEmpty()) {
+                        cm.setCookie(baseUrl, "$name=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/")
+                        cm.setCookie(baseUrl, "$name=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=.instagram.com")
+                        cm.setCookie(baseUrl, "$name=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=.facebook.com")
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun wipeStorageAndTargetWebViews(newUa: String) {
+        try {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
+                try {
+                    val profileStore = ProfileStore.getInstance()
+                    try {
+                        profileStore.getProfile("page2_profile")?.cookieManager?.removeAllCookies(null)
+                    } catch (_: Exception) {}
+                } catch (_: Exception) {}
+            }
+        } catch (_: Exception) {}
+
+        try {
+            val cm = CookieManager.getInstance()
+            clearDomainCookies(
+                cm,
+                listOf(
+                    "https://www.instagram.com",
+                    "https://instagram.com",
+                    "https://i.instagram.com",
+                    "https://m.instagram.com",
+                    "https://accountscenter.instagram.com",
+                    "https://www.facebook.com",
+                    "https://m.facebook.com",
+                    "https://facebook.com"
+                )
+            )
+            cm.flush()
+        } catch (_: Exception) {}
+
+        val clearStorageJs = """
+            (function(){
+                try {
+                    var h = (location.hostname || '').toLowerCase();
+                    if (h.indexOf('telegram.org') !== -1) return;
+                    if (window.localStorage) window.localStorage.clear();
+                    if (window.sessionStorage) window.sessionStorage.clear();
+                    if (window.indexedDB && typeof window.indexedDB.databases === 'function') {
+                        window.indexedDB.databases().then(function(dbs){
+                            if (!dbs) return;
+                            dbs.forEach(function(db){
+                                if (db && db.name) {
+                                    try { window.indexedDB.deleteDatabase(db.name); } catch(e){}
+                                }
+                            });
+                        }).catch(function(){});
+                    }
+                    if (window.caches && typeof window.caches.keys === 'function') {
+                        window.caches.keys().then(function(names){
+                            names.forEach(function(n){
+                                try { window.caches.delete(n); } catch(e){}
+                            });
+                        }).catch(function(){});
+                    }
+                } catch(e){}
+            })();
+        """.trimIndent()
+
+        try {
+            if (::nativeWebView.isInitialized) {
+                nativeWebView.stopLoading()
+                val cur = (nativeWebView.url ?: "").lowercase()
+                if (!cur.contains("telegram.org")) {
+                    nativeWebView.evaluateJavascript(clearStorageJs, null)
+                    nativeWebView.clearCache(true)
+                    nativeWebView.clearFormData()
+                    nativeWebView.clearHistory()
+                    nativeWebView.settings.userAgentString = if (isDesktopMode) desktopUserAgent else newUa
+                    nativeWebView.loadUrl("about:blank")
+                }
+            }
+        } catch (_: Exception) {}
+
+        try {
+            if (::browserWebView.isInitialized) {
+                browserWebView.stopLoading()
+                val cur = (browserWebView.url ?: "").lowercase()
+                if (!cur.contains("telegram.org")) {
+                    browserWebView.evaluateJavascript(clearStorageJs, null)
+                    browserWebView.clearCache(true)
+                    browserWebView.clearFormData()
+                    browserWebView.clearHistory()
+                    browserWebView.settings.userAgentString = if (isDesktopMode) desktopUserAgent else newUa
+                    if (isBrowserModeOpen) {
+                        browserWebView.loadUrl(INSTA_LOGIN_URL)
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    fun clearTelegramSession() {
+        if (isFinishing || isDestroyed) return
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            try {
+                val cm = CookieManager.getInstance()
+                clearDomainCookies(
+                    cm,
+                    listOf(
+                        "https://web.telegram.org",
+                        "https://telegram.org",
+                        "https://venus.web.telegram.org",
+                        "https://pluto.web.telegram.org",
+                        "https://aurora.web.telegram.org",
+                        "https://vesta.web.telegram.org",
+                        "https://flora.web.telegram.org"
+                    )
+                )
+                cm.flush()
+                telegramPopupAlreadyLoaded = false
+                toast("🧹 Telegram session cleared")
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun clearWebInstant() {
+        if (isFinishing || isDestroyed) return
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            try {
+                autoRegActive = false
+                try { if (::igAutomation.isInitialized) igAutomation.stopAutomation() } catch (_: Exception) {}
+                try { if (::igAutomation.isInitialized) igAutomation.forceReset() } catch (_: Exception) {}
+                try { StexApiService.stopOtpPolling() } catch (_: Exception) {}
+                try { if (::numberChecker.isInitialized) numberChecker.resetSession() } catch (_: Exception) {}
+
+                clearSessionStatePublic()
+                lastGeneratedUsername = ""
+                currentOtp = ""
+                lastUrl = INSTA_LOGIN_URL
+
+                val newUa = rotateUserAgent()
+                wipeStorageAndTargetWebViews(newUa)
+
+                try {
+                    if (::mainWebView.isInitialized) {
+                        mainWebView.evaluateJavascript(
+                            "(function(){try{if(window.TP&&window.TP.onWebCleared)window.TP.onWebCleared();}catch(e){}})();",
+                            null
+                        )
+                    }
+                } catch (_: Exception) {}
+
+                val deviceTag = newUa.substringAfter("Android ").substringBefore(" Build").ifBlank { "New Device" }
+                toast("🧹 IG Web Cleared! TG Safe ($deviceTag)")
+
+                mainHandler.postDelayed({
+                    if (isFinishing || isDestroyed) return@postDelayed
+                    try {
+                        if (::nativeWebView.isInitialized) nativeWebView.loadUrl(INSTA_LOGIN_URL)
+                    } catch (_: Exception) {}
+                    bringTelegramFabToFront()
+                }, 300)
+            } catch (e: Exception) {
+                Log.e(TAG, "clearWebInstant error: ${e.message}")
+            }
+        }
+    }
+
+    fun loadTargetWebUrl(url: String) { try { if (::nativeWebView.isInitialized) nativeWebView.loadUrl(url) } catch (_: Exception) {} }
+    fun reloadActiveView() { try { if (::nativeWebView.isInitialized) nativeWebView.reload() } catch (_: Exception) {} }
+    fun openCookiesPrompt() {}
+    fun openManualSaveInput() {}
+    fun lockProtectedText() {}
+    fun onPhoneFailedFromJs() { autoRegActive = false }
+    fun typeIntoFieldImpl(callbackId: String, selector: String, value: String) {}
+
+    fun saveFileToDownloadsImpl(filename: String, mimeType: String, data: String): Boolean {
+        return try {
+            val safeName = filename.trim().ifBlank { "instaraj_${System.currentTimeMillis()}.txt" }
+                .replace(Regex("[\\\\/:*?\"<>|]"), "_")
+            val safeMime = mimeType.trim().ifBlank { "text/plain" }
+            val bytes = data.toByteArray(StandardCharsets.UTF_8)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val cv = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, safeName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, safeMime)
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                val resolver = contentResolver
+                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv)
+                if (uri != null) {
+                    resolver.openOutputStream(uri)?.use { out ->
+                        out.write(bytes)
+                        out.flush()
+                    }
+                    cv.clear()
+                    cv.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    resolver.update(uri, cv, null, null)
+                    toast("✓ Downloaded: $safeName")
+                    true
+                } else {
+                    val fallbackDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
+                    val f = File(fallbackDir, safeName)
+                    FileOutputStream(f).use { it.write(bytes); it.flush() }
+                    toast("✓ Saved: ${f.absolutePath}")
+                    true
+                }
+            } else {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    != PackageManager.PERMISSION_GRANTED
+                ) {
+                    ActivityCompat.requestPermissions(
+                        this,
+                        arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                        STORAGE_PERMISSION_REQUEST
+                    )
+                }
+                val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                if (!dir.exists()) dir.mkdirs()
+                val f = File(dir, safeName)
+                FileOutputStream(f).use { out ->
+                    out.write(bytes)
+                    out.flush()
+                }
+                toast("✓ Downloaded: ${f.name}")
+                true
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Download error: ${e.message}")
+            toast("Download failed: ${e.message}")
+            false
+        }
+    }
+
+    fun isBlockedExternalScheme(url: String?): Boolean {
+        if (url.isNullOrBlank()) return false
+        val blocked = listOf("intent://", "market://", "whatsapp://", "tg://", "tel:", "sms:", "mailto:")
+        return blocked.any { url.startsWith(it) }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  TOTP
+    // ═══════════════════════════════════════════════════════════
+    internal fun generateTotp(base32Key: String): String {
+        try {
+            val cleaned = base32Key.uppercase().replace(Regex("[^A-Z2-7]"), "")
+            if (cleaned.isEmpty()) return ""
+            val keyBytes = base32Decode(cleaned)
+            val timeStep = (System.currentTimeMillis() / 1000L) / 30L
+            val buffer = ByteBuffer.allocate(8).putLong(timeStep).array()
+            val mac = Mac.getInstance("HmacSHA1")
+            mac.init(SecretKeySpec(keyBytes, "HmacSHA1"))
+            val hash = mac.doFinal(buffer)
+            val offset = hash[hash.size - 1].toInt() and 0x0F
+            val binary = ((hash[offset].toInt() and 0x7F) shl 24) or
+                    ((hash[offset + 1].toInt() and 0xFF) shl 16) or
+                    ((hash[offset + 2].toInt() and 0xFF) shl 8) or
+                    (hash[offset + 3].toInt() and 0xFF)
+            return String.format(Locale.US, "%06d", binary % 1000000)
+        } catch (_: Exception) { return "" }
+    }
+
+    private fun base32Decode(input: String): ByteArray {
+        val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+        var bits = 0; var value = 0
+        val out = ByteArrayOutputStream()
+        for (c in input) {
+            val idx = alphabet.indexOf(c); if (idx < 0) continue
+            value = (value shl 5) or idx
+            bits += 5
+            if (bits >= 8) { out.write((value ushr (bits - 8)) and 0xFF); bits -= 8 }
+        }
+        return out.toByteArray()
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  STATE
+    // ═══════════════════════════════════════════════════════════
+    internal fun saveCurrentMail() {
+        try {
+            getSharedPreferences(CUR_MAIL_PREFS, MODE_PRIVATE).edit()
+                .putString(KEY_CUR_MAIL, currentMail).putString(KEY_CUR_PWD, currentMailPassword)
+                .putString(KEY_CUR_STATUS, currentMailStatus).putString(KEY_CUR_OTP, currentOtp)
+                .putString(KEY_CUR_NUMBER, currentNumber).putString(KEY_CUR_COUNTRY, currentCountry)
+                .putString(KEY_CUR_FULL_KEY, currentMailFullKey).putString(KEY_CUR_BOX_SOURCE, activeBoxSource)
+                .putString(KEY_CUR_2FA, current2FAKey).apply()
+        } catch (_: Exception) {}
+    }
+
+    internal fun restoreCurrentMail() {
+        try {
+            val p = getSharedPreferences(CUR_MAIL_PREFS, MODE_PRIVATE)
+            currentMail = p.getString(KEY_CUR_MAIL, "") ?: ""
+            currentMailPassword = p.getString(KEY_CUR_PWD, "") ?: ""
+            currentMailStatus = p.getString(KEY_CUR_STATUS, "idle") ?: "idle"
+            currentOtp = p.getString(KEY_CUR_OTP, "") ?: ""
+            currentNumber = p.getString(KEY_CUR_NUMBER, "") ?: ""
+            currentCountry = p.getString(KEY_CUR_COUNTRY, "") ?: ""
+            currentMailFullKey = p.getString(KEY_CUR_FULL_KEY, "") ?: ""
+            activeBoxSource = p.getString(KEY_CUR_BOX_SOURCE, "") ?: ""
+            current2FAKey = p.getString(KEY_CUR_2FA, "") ?: ""
+        } catch (_: Exception) {}
+    }
+
+    internal fun loadSavedPassword() {
+        try { savedPassword = getSharedPreferences(PW_PREFS, MODE_PRIVATE).getString(KEY_PW, "") ?: "" }
+        catch (_: Exception) {}
+    }
+
+    internal fun savePassword(pwd: String) {
+        savedPassword = pwd
+        try { getSharedPreferences(PW_PREFS, MODE_PRIVATE).edit().putString(KEY_PW, pwd).apply() }
+        catch (_: Exception) {}
+    }
+
+    internal fun getSavedRange(): String = try {
+        val v = getSharedPreferences(RANGE_PREFS, MODE_PRIVATE).getString(KEY_SAVED_RANGE, "") ?: ""
+        if (v.isBlank()) "{}" else v
+    } catch (_: Exception) { "{}" }
+
+    internal fun saveSelectedRange(json: String) {
+        try { getSharedPreferences(RANGE_PREFS, MODE_PRIVATE).edit().putString(KEY_SAVED_RANGE, json).apply() }
+        catch (_: Exception) {}
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  SHEET
+    // ═══════════════════════════════════════════════════════════
+    internal fun getSheetArray(): JSONArray = try {
+        JSONArray(getSharedPreferences(SHEET_STORE_PREFS, MODE_PRIVATE).getString(KEY_SHEET_JSON, "[]") ?: "[]")
+    } catch (_: Exception) { JSONArray() }
+
+    internal fun saveSheetArray(arr: JSONArray) {
+        try { getSharedPreferences(SHEET_STORE_PREFS, MODE_PRIVATE).edit().putString(KEY_SHEET_JSON, arr.toString()).apply() }
+        catch (_: Exception) {}
+    }
+
+    fun getSheetJson(): String = getSheetArray().toString()
+    fun getSheetCount(): Int = getSheetArray().length()
+
+    fun saveToSheet(uid: String, pass: String, cookies: String, hotmail: String, twofa: String): Boolean {
+        try {
+            val u = uid.trim(); if (u.isEmpty()) return false
+
+            val finalPass = pass.trim().ifBlank {
+                currentMailPassword.ifBlank { savedPassword }
+            }
+            val finalTwofa = twofa.trim().ifBlank {
+                current2FAKey.ifBlank {
+                    if (currentNumber.isNotBlank()) getMeta2FANative(currentNumber) else ""
+                }
+            }
+            val finalCookies = cookies.trim().ifBlank { getInstagramCookiesPublic() }
+
+            val arr = getSheetArray()
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                if (obj.optString("uid") == u) {
+                    if (finalPass.isNotBlank()) obj.put("pass", finalPass)
+                    if (finalCookies.isNotBlank()) obj.put("cookies", finalCookies)
+                    if (hotmail.isNotBlank()) obj.put("hotmail", hotmail)
+                    if (finalTwofa.isNotBlank()) obj.put("twofa", finalTwofa)
+                    obj.put("savedAt", System.currentTimeMillis())
+                    saveSheetArray(arr); lastSavedUid = u; lastSavedAt = System.currentTimeMillis()
+                    return true
+                }
+            }
+            arr.put(JSONObject().apply {
+                put("uid", u)
+                put("pass", finalPass)
+                put("cookies", finalCookies)
+                put("hotmail", hotmail)
+                put("twofa", finalTwofa)
+                put("number", currentNumber)
+                put("savedAt", System.currentTimeMillis())
+            })
+            saveSheetArray(arr); lastSavedUid = u; lastSavedAt = System.currentTimeMillis()
+            return true
+        } catch (_: Exception) { return false }
+    }
+
+    fun clearSheetAll(): Boolean {
+        try {
+            val arr = getSheetArray()
+            if (arr.length() > 0) {
+                moveToRecovery(arr.toString())
+            }
+            saveSheetArray(JSONArray())
+            return true
+        } catch (_: Exception) { return false }
+    }
+
+    fun undoLastSave(uid: String): Boolean {
+        try {
+            val arr = getSheetArray(); val out = JSONArray()
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                if (obj.optString("uid") != uid.trim()) out.put(obj)
+            }
+            saveSheetArray(out); return true
+        } catch (_: Exception) { return false }
+    }
+
+    fun exportSheetToFile(fileName: String, mode: String): Boolean {
+        return try {
+            val arr = getSheetArray()
+            if (arr.length() == 0) { toast("No data to export"); return false }
+            val sb = StringBuilder()
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val uid = o.optString("uid")
+                val pass = o.optString("pass")
+                val ck = o.optString("cookies")
+                val tfa = o.optString("twofa")
+                val parts = mutableListOf(uid, pass)
+                when (mode) {
+                    "1" -> if (ck.isNotBlank()) parts.add(ck)
+                    "2" -> if (tfa.isNotBlank()) parts.add("2FA:$tfa")
+                    "3" -> {
+                        if (ck.isNotBlank()) parts.add(ck)
+                        if (tfa.isNotBlank()) parts.add("2FA:$tfa")
+                    }
+                    "4" -> if (tfa.isNotBlank()) parts.add(tfa)
+                    "5" -> {
+                        if (ck.isNotBlank()) parts.add(ck)
+                        if (tfa.isNotBlank()) parts.add(tfa)
+                    }
+                }
+                sb.appendLine(parts.joinToString(" "))
+            }
+            val finalName = fileName.trim().ifBlank { "instaraj_export_${System.currentTimeMillis()}.txt" }
+            saveFileToDownloadsImpl(finalName, "text/plain", sb.toString())
+        } catch (e: Exception) {
+            toast("Export failed: ${e.message}")
+            false
+        }
+    }
+
+    fun exportSheetAsXLSX() {
+        try {
+            val arr = getSheetArray(); if (arr.length() == 0) { toast("No data"); return }
+            val sb = StringBuilder("UID,Password,Cookies,Hotmail,2FA,Number\n")
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                sb.append(escCsv(o.optString("uid"))).append(",")
+                    .append(escCsv(o.optString("pass"))).append(",")
+                    .append(escCsv(o.optString("cookies"))).append(",")
+                    .append(escCsv(o.optString("hotmail"))).append(",")
+                    .append(escCsv(o.optString("twofa"))).append(",")
+                    .append(escCsv(o.optString("number"))).append("\n")
+            }
+            saveFileToDownloadsImpl("accounts_${System.currentTimeMillis()}.csv", "text/csv", sb.toString())
+        } catch (e: Exception) { toast("Export failed: ${e.message}") }
+    }
+
+    private fun escCsv(s: String): String {
+        val t = s.replace("\"", "\"\"")
+        return if (t.contains(",") || t.contains("\"") || t.contains("\n")) "\"$t\"" else t
+    }
+
+    fun exportBackupAsXLSX(json: String) {
+        try {
+            val arr = JSONArray(json)
+            val sb = StringBuilder("UID,Password,Cookies,Hotmail,2FA,Number\n")
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                sb.append(escCsv(o.optString("uid"))).append(",")
+                    .append(escCsv(o.optString("pass"))).append(",")
+                    .append(escCsv(o.optString("cookies"))).append(",")
+                    .append(escCsv(o.optString("hotmail"))).append(",")
+                    .append(escCsv(o.optString("twofa"))).append(",")
+                    .append(escCsv(o.optString("number"))).append("\n")
+            }
+            saveFileToDownloadsImpl("backup_${System.currentTimeMillis()}.csv", "text/csv", sb.toString())
+        } catch (e: Exception) { toast("Backup failed: ${e.message}") }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  RECOVERY (72-hour retention)
+    // ═══════════════════════════════════════════════════════════
+    fun moveToRecovery(jsonData: String): Boolean {
+        return try {
+            val prefs = getSharedPreferences(RECOVERY_PREFS, MODE_PRIVATE)
+            val arr = JSONArray(prefs.getString(KEY_RECOVERY_JSON, "[]") ?: "[]")
+            val now = System.currentTimeMillis()
+            val cleaned = JSONArray()
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                if (now - o.optLong("deletedAt", 0L) < RECOVERY_TTL_MS) cleaned.put(o)
+            }
+            cleaned.put(JSONObject().put("data", jsonData).put("deletedAt", now))
+            prefs.edit().putString(KEY_RECOVERY_JSON, cleaned.toString()).apply()
+            true
+        } catch (_: Exception) { false }
+    }
+
+    fun getRecoveryList(): String {
+        return try {
+            val prefs = getSharedPreferences(RECOVERY_PREFS, MODE_PRIVATE)
+            val arr = JSONArray(prefs.getString(KEY_RECOVERY_JSON, "[]") ?: "[]")
+            val now = System.currentTimeMillis()
+            val out = JSONArray()
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val age = now - o.optLong("deletedAt", 0L)
+                if (age < RECOVERY_TTL_MS) {
+                    o.put("hoursLeft", (RECOVERY_TTL_MS - age) / 3600_000)
+                    out.put(o)
+                }
+            }
+            out.toString()
+        } catch (_: Exception) { "[]" }
+    }
+
+    fun purgeExpiredRecovery() {
+        try {
+            val prefs = getSharedPreferences(RECOVERY_PREFS, MODE_PRIVATE)
+            val arr = JSONArray(prefs.getString(KEY_RECOVERY_JSON, "[]") ?: "[]")
+            val now = System.currentTimeMillis()
+            val cleaned = JSONArray()
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                if (now - o.optLong("deletedAt", 0L) < RECOVERY_TTL_MS) cleaned.put(o)
+            }
+            prefs.edit().putString(KEY_RECOVERY_JSON, cleaned.toString()).apply()
+        } catch (_: Exception) {}
+    }
+
+    fun restoreRecoveryItem(idx: Int): Boolean {
+        return try {
+            val prefs = getSharedPreferences(RECOVERY_PREFS, MODE_PRIVATE)
+            val arr = JSONArray(prefs.getString(KEY_RECOVERY_JSON, "[]") ?: "[]")
+            if (idx < 0 || idx >= arr.length()) return false
+            val item = arr.optJSONObject(idx) ?: return false
+            val dataStr = item.optString("data", "")
+            if (dataStr.isNotBlank()) {
+                val restoreArr = try { JSONArray(dataStr) } catch (_: Exception) { JSONArray() }
+                val existing = getSheetArray()
+                for (i in 0 until restoreArr.length()) {
+                    existing.put(restoreArr.get(i))
+                }
+                saveSheetArray(existing)
+            }
+            arr.remove(idx)
+            prefs.edit().putString(KEY_RECOVERY_JSON, arr.toString()).apply()
+            toast("✓ Restored from recovery")
+            true
+        } catch (_: Exception) { false }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  COOKIES (INSTAGRAM ONLY - CLEAN & EXACT FORMAT)
+    // ═══════════════════════════════════════════════════════════
+    fun getUidFromCookiesPublic(): String {
+        return try {
+            val ck = getInstagramCookiesPublic()
+            Regex("ds_user_id=(\\d+)").find(ck)?.groupValues?.get(1)
+                ?: Regex("c_user=(\\d+)").find(ck)?.groupValues?.get(1) ?: ""
+        } catch (_: Exception) { "" }
+    }
+
+    fun getFacebookCookiesPublic(): String = getInstagramCookiesPublic()
+
+    fun loginWithCookies(cookies: String) {
+        try {
+            val cm = CookieManager.getInstance()
+            cm.setAcceptCookie(true)
+            for (p in cookies.split(";")) {
+                val kv = p.split("=", limit = 2)
+                if (kv.size == 2) cm.setCookie("https://www.instagram.com", "${kv[0].trim()}=${kv[1].trim()}")
+            }
+            cm.flush()
+            prepareNativeWebForAutomation()
+            if (::nativeWebView.isInitialized) nativeWebView.loadUrl(HOME_URL)
+            toast("Logging in with cookies...")
+        } catch (_: Exception) {}
+    }
+
+    fun resetNumberCheckState() { try { if (::numberChecker.isInitialized) numberChecker.resetSession() } catch (_: Exception) {} }
+
+    fun getNumberCheckStatusPublic(): String = try {
+        JSONObject().apply {
+            put("enabled", if (::numberChecker.isInitialized) numberChecker.isEnabled() else false)
+            put("active", if (::numberChecker.isInitialized) numberChecker.isActive() else false)
+        }.toString()
+    } catch (_: Exception) { "{}" }
+
+    internal fun updateProxyConnectionStatus(failed: Boolean) {
+        proxyConnectionFailed = failed
+        try { getSharedPreferences(PROXY_PREFS, MODE_PRIVATE).edit().putBoolean(KEY_PROXY_FAILED, failed).apply() }
+        catch (_: Exception) {}
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  PROXY
+    // ═══════════════════════════════════════════════════════════
+    fun togglePage1Proxy(enabled: Boolean) {
+        if (isProxyToggling) return
+        isProxyToggling = true
+        updateProxyConnectionStatus(false)
+        page1ProxyEnabled = enabled; page2ProxyEnabled = enabled
+        try {
+            getSharedPreferences(PROXY_PREFS, MODE_PRIVATE).edit()
+                .putBoolean(KEY_PAGE1_PROXY, enabled).putBoolean(KEY_PAGE2_PROXY, enabled).apply()
+        } catch (_: Exception) {}
+        applyActiveProxy()
+    }
+
+    fun togglePage2Proxy(enabled: Boolean) {
+        if (isProxyToggling) return
+        isProxyToggling = true
+        updateProxyConnectionStatus(false)
+        page2ProxyEnabled = enabled; page1ProxyEnabled = enabled
+        try {
+            getSharedPreferences(PROXY_PREFS, MODE_PRIVATE).edit()
+                .putBoolean(KEY_PAGE2_PROXY, enabled).putBoolean(KEY_PAGE1_PROXY, enabled).apply()
+        } catch (_: Exception) {}
+        applyActiveProxy()
+    }
+
+    internal fun applyActiveProxy(onComplete: (() -> Unit)? = null) {
+        val should = if (isBrowserModeOpen) page2ProxyEnabled else page1ProxyEnabled
+        if (!should) { clearProxyOverride { runOnUiThread { onComplete?.invoke() } }; isProxyToggling = false; return }
+        if (proxyConnectionFailed || currentProxyIp.isBlank() || currentProxyPort.isBlank()) {
+            isProxyToggling = false; onComplete?.invoke(); return
+        }
+        applyProxyOverride(onComplete)
+    }
+
+    internal fun applyProxyOverride(onComplete: (() -> Unit)? = null) {
+        try {
+            if (!WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
+                isProxyToggling = false; onComplete?.invoke(); return
+            }
+            val rule = "http://${currentProxyIp}:${currentProxyPort}"
+            val config = ProxyConfig.Builder().addProxyRule(rule)
+                .addBypassRule("127.0.0.1").addBypassRule("localhost").addBypassRule("<local>").build()
+            ProxyController.getInstance().setProxyOverride(config, proxyExecutor) {
+                proxyActuallyActive = true; isProxyToggling = false
+                updateProxyConnectionStatus(false)
+                runOnUiThread { onComplete?.invoke() }
+            }
+        } catch (_: Exception) { isProxyToggling = false; onComplete?.invoke() }
+    }
+
+    internal fun clearProxyOverride(onDone: (() -> Unit)? = null) {
+        try {
+            ProxyController.getInstance().clearProxyOverride(proxyExecutor) {
+                proxyActuallyActive = false; isProxyToggling = false
+                runOnUiThread { onDone?.invoke() }
+            }
+        } catch (_: Exception) { proxyActuallyActive = false; isProxyToggling = false; onDone?.invoke() }
+    }
+
+    fun setBrowserProxy(ip: String, port: String, user: String, pass: String) {
+        currentProxyIp = ip.trim(); currentProxyPort = port.trim()
+        currentProxyUser = user.trim(); currentProxyPass = pass
+        try {
+            getSharedPreferences(PROXY_PREFS, MODE_PRIVATE).edit()
+                .putString(KEY_PROXY_IP, currentProxyIp).putString(KEY_PROXY_PORT, currentProxyPort)
+                .putString(KEY_PROXY_USER, currentProxyUser).putString(KEY_PROXY_PASS, currentProxyPass).apply()
+        } catch (_: Exception) {}
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  OTP NOTIFICATION
+    // ═══════════════════════════════════════════════════════════
+    internal fun createOtpChannel() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val ch = NotificationChannel(OTP_CHANNEL_ID, OTP_CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH).apply {
+                    enableVibration(true)
+                    lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                }
+                (getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager)?.createNotificationChannel(ch)
+            }
+        } catch (_: Exception) {}
+    }
+
+    internal fun showOtpNotification(otp: String, info: String, silent: Boolean = false) {
+        if (otp.isBlank() || isFinishing || isDestroyed) return
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+            }
+            val i = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val p = PendingIntent.getActivity(this, 0, i,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            val builder = NotificationCompat.Builder(this, OTP_CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("OTP: $otp").setContentText(info).setAutoCancel(true)
+                .setContentIntent(p).setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
+            if (silent) { builder.setSilent(true); builder.setPriority(NotificationCompat.PRIORITY_LOW) }
+            NotificationManagerCompat.from(this).notify(((info + otp).hashCode() and 0x7FFFFFFF), builder.build())
+        } catch (_: Exception) {}
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  StexApiService Callbacks
+    // ═══════════════════════════════════════════════════════════
+    override fun onLog(message: String) { Log.d("StexApi", message) }
+
+    internal fun fetchRangesFromPanel() {
+        try {
+            if (!StexApiService.hasApiKey()) {
+                toast("API Key missing"); onRangesFailed("API Key missing", ""); return
+            }
+            lifecycleScope.launch {
+                try {
+                    val r = StexApiService.getLiveAccess()
+                    if (r.isSuccess) onRangesLoaded(r.getOrNull() ?: emptyList())
+                    else onRangesFailed(r.exceptionOrNull()?.message ?: "Unknown", "")
+                } catch (e: Exception) {
+                    onRangesFailed(e.message ?: "Unknown", "")
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    override fun onRangesLoaded(ranges: List<StexApiService.RangeInfo>) {
+        if (isFinishing || isDestroyed || !::mainWebView.isInitialized) return
+        runOnUiThread {
+            if (isFinishing || isDestroyed || !::mainWebView.isInitialized) return@runOnUiThread
+            try {
+                val top20 = ranges.take(20)
+                val json = buildString {
+                    append("[")
+                    top20.forEachIndexed { i, r ->
+                        if (i > 0) append(",")
+                        append("{\"rid\":\"").append(esc(r.rid)).append("\",")
+                        append("\"range\":\"").append(esc(r.range)).append("\",")
+                        append("\"label\":\"").append(esc(r.label)).append("\",")
+                        append("\"country\":\"").append(esc(r.country)).append("\"}")
+                    }
+                    append("]")
+                }
+                mainWebView.evaluateJavascript(
+                    "(function(){if(window.TP&&window.TP.onRangesLoaded)window.TP.onRangesLoaded(${quote(json)});})();", null
+                )
+            } catch (_: Exception) {}
+        }
+    }
+
+    override fun onRangesFailed(error: String, rawResponse: String) {
+        if (isFinishing || isDestroyed || !::mainWebView.isInitialized) return
+        runOnUiThread {
+            if (isFinishing || isDestroyed || !::mainWebView.isInitialized) return@runOnUiThread
+            try {
+                val safeErr = JSONObject.quote(error)
+                mainWebView.evaluateJavascript(
+                    "(function(){try{if(window.TP&&window.TP.onRangesFailed)window.TP.onRangesFailed($safeErr,'');}catch(e){}})();", null
+                )
+            } catch (_: Exception) {}
+        }
+    }
+
+    internal fun requestNumberFromPanel(rid: String) {
+        try {
+            val realRid = rid.ifBlank { StexApiService.getSelectedRid() }
+            if (realRid.isBlank()) { toast("Select range first"); onNumberFailed("No range"); return }
+            lifecycleScope.launch {
+                try {
+                    val r = StexApiService.allocateNumber(realRid)
+                    if (r.isSuccess) {
+                        val n = r.getOrNull()!!
+                        onNumberAllocated(n.number, realRid, n.country, n.operator)
+                    } else onNumberFailed(r.exceptionOrNull()?.message ?: "Unknown")
+                } catch (e: Exception) {
+                    onNumberFailed(e.message ?: "Unknown")
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    override fun onNumberAllocated(number: String, rid: String, country: String, operator: String) {
+        if (isFinishing || isDestroyed) return
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            try {
+                copyToClipboard(number, "Number Copied: $number")
+                allocatedNumber = number; currentNumber = number; currentCountry = country
+                currentOtp = ""; activeBoxSource = "number"
+                if (currentMailPassword.isBlank() && savedPassword.isNotBlank()) {
+                    currentMailPassword = savedPassword
+                }
+                saveCurrentMail()
+                try {
+                    if (::mainWebView.isInitialized) {
+                        mainWebView.evaluateJavascript(
+                            "(function(){try{if(window.TP&&window.TP.setNumber)window.TP.setNumber('${esc(number)}','${esc(country)}');}catch(e){}})();",
+                            null
+                        )
+                    }
+                } catch (_: Exception) {}
+                fillInstagramLogin(number, currentMailPassword)
+                try {
+                    StexApiService.startOtpPolling(number, this)
+                } catch (_: Exception) {}
+            } catch (_: Exception) {}
+        }
+    }
+
+    override fun onNumberFailed(error: String) { runOnUiThread { toast("Number failed: $error") } }
+
+    override fun onOtpReceived(otp: String, number: String) {
+        if (isFinishing || isDestroyed) return
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            try {
+                val now = System.currentTimeMillis()
+                if (otp == lastOtpReceived && now - lastOtpTime < 15000) return@runOnUiThread
+                lastOtpReceived = otp; lastOtpTime = now
+                currentOtp = otp; saveCurrentMail()
+                copyToClipboard(otp, "OTP: $otp")
+                showOtpNotification(otp, number)
+                try {
+                    if (::mainWebView.isInitialized) {
+                        mainWebView.evaluateJavascript(
+                            "(function(){try{if(window.TP&&window.TP.setOtp)window.TP.setOtp('${esc(otp)}');}catch(e){}})();", null
+                        )
+                    }
+                } catch (_: Exception) {}
+            } catch (_: Exception) {}
+        }
+    }
+
+    override fun onOtpTimeout() { runOnUiThread { toast("OTP timeout") } }
+
+    // ═══════════════════════════════════════════════════════════
+    //  onCreate & LIFECYCLE
+    // ═══════════════════════════════════════════════════════════
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        try {
+            val cm = CookieManager.getInstance()
+            cm.setAcceptCookie(true)
+            cm.flush()
+        } catch (_: Exception) {}
+        try { TelegramBotActivity.attachHostActivity(this) } catch (_: Exception) {}
+
+        try {
+            window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.BLACK))
+            window.decorView.setBackgroundColor(Color.BLACK)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                window.statusBarColor = Color.BLACK
+                window.navigationBarColor = Color.BLACK
+            }
+        } catch (_: Exception) {}
+
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(Color.BLACK)
+            clipChildren = true
+            clipToPadding = true
+        }
+        setContentView(root)
+
+        mainWebView = WebView(this).apply { setBackgroundColor(Color.BLACK) }
+        root.addView(mainWebView, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ))
+
+        nativeWebView = WebView(this).apply {
+            setBackgroundColor(Color.BLACK)
+            visibility = View.GONE
+        }
+        root.addView(nativeWebView, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ))
+
+        try { window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING) } catch (_: Exception) {}
+
+        darkModeEnabled = try {
+            getSharedPreferences(THEME_PREFS, MODE_PRIVATE).getBoolean(KEY_DARK_MODE, true)
+        } catch (_: Exception) { true }
+        restoreFloatingBubblePref()
+
+        try { nativeWebView.visibility = View.INVISIBLE; nativeWebSuppressed = true } catch (_: Exception) {}
+
+        restoreActivePage()
+
+        try { hotmailPool = HotmailPool(this) } catch (_: Exception) {}
+
+        try {
+            initMainWebView()
+            initNativeWebView()
+            initBrowserWebView()
+        } catch (e: Exception) {
+            Log.e(TAG, "WebView init error: ${e.message}")
+        }
+
+        ensureTelegramFloatingFab()
+
+        igAutomation = IgAutomation(this, nativeWebView, mainHandler)
+
+        try { numberChecker = FacebookNumberChecker(this) } catch (_: Exception) {}
+        try { liveChecker = LiveUidChecker(this) } catch (_: Exception) {}
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                try {
+                    if (telegramPopupLocked || backButtonBlocked) {
+                        toast("🔒 Telegram Locked! Unlock first")
+                        return
+                    }
+                    if (uiOverlayActive) {
+                        closeTelegramOverlayAndRestoreInsta()
+                        return
+                    }
+                    if (activePageName == "fb") {
+                        setActivePageInternal("insta")
+                        mainHandler.post {
+                            try {
+                                if (!isFinishing && !isDestroyed && ::mainWebView.isInitialized) {
+                                    mainWebView.evaluateJavascript(
+                                        "try{window.TP&&window.TP.closeFbPage&&window.TP.closeFbPage();}catch(e){}", null
+                                    )
+                                }
+                            } catch (_: Exception) {}
+                        }
+                        return
+                    }
+                    if (::nativeWebView.isInitialized && nativeWebView.visibility == View.VISIBLE && nativeWebView.canGoBack()) {
+                        nativeWebView.goBack()
+                    } else {
+                        showFloatingBubble(minimizeApp = true)
+                    }
+                } catch (_: Exception) {}
+            }
+        })
+
+        mainHandler.post {
+            if (isFinishing || isDestroyed) return@post
+            try {
+                try { StexApiService.init(this) } catch (_: Exception) {}
+                createOtpChannel()
+                loadSavedPassword()
+                restoreCurrentMail()
+                purgeExpiredRecovery()
+                try {
+                    val pp = getSharedPreferences(PROXY_PREFS, MODE_PRIVATE)
+                    currentProxyIp = pp.getString(KEY_PROXY_IP, "") ?: ""
+                    currentProxyPort = pp.getString(KEY_PROXY_PORT, "") ?: ""
+                    currentProxyUser = pp.getString(KEY_PROXY_USER, "") ?: ""
+                    currentProxyPass = pp.getString(KEY_PROXY_PASS, "") ?: ""
+                    page1ProxyEnabled = pp.getBoolean(KEY_PAGE1_PROXY, false)
+                    page2ProxyEnabled = pp.getBoolean(KEY_PAGE2_PROXY, false)
+                    proxyConnectionFailed = pp.getBoolean(KEY_PROXY_FAILED, false)
+                } catch (_: Exception) {}
+                mainHandler.postDelayed({ if (!isFinishing && !isDestroyed) requestAllPermissionsIfNeeded() }, 300)
+                mainHandler.postDelayed(copyBtnInjector, 1500)
+            } catch (e: Exception) {
+                Log.e(TAG, "deferred onCreate error: ${e.message}")
+            }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        isActivityVisible = true
+        try {
+            if (::mainWebView.isInitialized) mainWebView.onResume()
+            if (::nativeWebView.isInitialized) nativeWebView.onResume()
+            if (::browserWebView.isInitialized) browserWebView.onResume()
+        } catch (_: Exception) {}
+    }
+
+    override fun onResume() {
+        super.onResume()
+        isActivityVisible = true
+        updateNativeTgFabVisibility()
+        if (floatingBubbleEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this)) {
+            startBubbleServiceOnly()
+        }
+    }
+
+    override fun onPause() {
+        try { CookieManager.getInstance().flush() } catch (_: Exception) {}
+        super.onPause()
+    }
+
+    override fun onUserLeaveHint() {
+        try { CookieManager.getInstance().flush() } catch (_: Exception) {}
+        if (floatingBubbleEnabled && isActivityVisible) {
+            startBubbleServiceOnly()
+        }
+        super.onUserLeaveHint()
+    }
+
+    override fun onStop() {
+        try { CookieManager.getInstance().flush() } catch (_: Exception) {}
+        isActivityVisible = false
+        super.onStop()
+    }
+
+    internal fun pushLiveCredsToHtml() {
+        try {
+            if (isFinishing || isDestroyed || !::mainWebView.isInitialized) return
+            val uid = getUidFromCookiesPublic()
+            val ck = getInstagramCookiesPublic()
+            val sUid = esc(uid)
+            val sCk = esc(ck)
+            val js = "(function(){try{var u=document.getElementById('webUid');if(u)u.value='$sUid';" +
+                    "var c=document.getElementById('webCookies');if(c)c.value='$sCk';" +
+                    "if(window.TP&&window.TP.setCookiesData)window.TP.setCookiesData('$sCk');}catch(e){}})();"
+            mainWebView.evaluateJavascript(js, null)
+        } catch (_: Exception) {}
+    }
+
+    internal fun requestAllPermissionsIfNeeded() {
+        if (isFinishing || isDestroyed) return
+        try {
+            // 1. Notification & Storage Permissions
+            val perms = mutableListOf<String>()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+                    perms.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
+                    perms.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+            if (perms.isNotEmpty()) {
+                ActivityCompat.requestPermissions(this, perms.toTypedArray(), NOTIF_PERMISSION_REQUEST)
+                return
+            }
+
+            // 2. Ignore Battery Optimizations (Background Keep-Alive Permission)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                if (pm != null && !pm.isIgnoringBatteryOptimizations(packageName)) {
+                    val prefs = getSharedPreferences(BG_PREFS, MODE_PRIVATE)
+                    if (!prefs.getBoolean(KEY_BATTERY_ASKED, false)) {
+                        prefs.edit().putBoolean(KEY_BATTERY_ASKED, true).apply()
+                        try {
+                            val i = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                data = Uri.parse("package:$packageName")
+                            }
+                            @Suppress("DEPRECATION")
+                            startActivityForResult(i, BATTERY_OPTIMIZATION_REQUEST_CODE)
+                            toast("ব্যাকগ্রাউন্ডে চলার জন্য 'Allow' দিন")
+                            return
+                        } catch (_: Exception) {
+                            try {
+                                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                                return
+                            } catch (_: Exception) {}
+                        }
+                    }
+                }
+
+                // 3. Display Over Other Apps (Floating Bubble Overlay Permission)
+                if (floatingBubbleEnabled && !Settings.canDrawOverlays(this)) {
+                    val prefs = getSharedPreferences(BG_PREFS, MODE_PRIVATE)
+                    if (!prefs.getBoolean(KEY_OVERLAY_ASKED, false)) {
+                        prefs.edit().putBoolean(KEY_OVERLAY_ASKED, true).apply()
+                        try {
+                            val intent = Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:$packageName")
+                            )
+                            @Suppress("DEPRECATION")
+                            startActivityForResult(intent, OVERLAY_PERMISSION_REQUEST_CODE)
+                            toast("ফ্লোটিং বাবলের জন্য 'Display over other apps' অন করুন")
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "requestAllPermissionsIfNeeded error: ${e.message}")
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == NOTIF_PERMISSION_REQUEST) {
+            mainHandler.postDelayed({
+                if (!isFinishing && !isDestroyed) requestAllPermissionsIfNeeded()
+            }, 300)
+        }
+    }
+
+    private fun extractUrisFromIntent(resultCode: Int, data: Intent?): Array<Uri>? {
+        if (resultCode != Activity.RESULT_OK || data == null) return null
+        return try {
+            val clip = data.clipData
+            if (clip != null && clip.itemCount > 0) {
+                val list = mutableListOf<Uri>()
+                for (i in 0 until clip.itemCount) {
+                    clip.getItemAt(i)?.uri?.let { list.add(it) }
+                }
+                if (list.isNotEmpty()) list.toTypedArray() else null
+            } else {
+                data.data?.let { arrayOf(it) }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "extractUrisFromIntent error: ${e.message}")
+            null
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        try {
+            if (requestCode == OVERLAY_PERMISSION_REQUEST_CODE) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this)) {
+                    startBubbleServiceOnly()
+                    toast("✓ Overlay & Background permission active")
+                } else {
+                    toast("Overlay permission denied")
+                }
+                return
+            }
+            if (requestCode == BATTERY_OPTIMIZATION_REQUEST_CODE) {
+                mainHandler.postDelayed({
+                    if (!isFinishing && !isDestroyed) requestAllPermissionsIfNeeded()
+                }, 300)
+                return
+            }
+            if (requestCode == FILE_CHOOSER_REQUEST_CODE) {
+                val results = extractUrisFromIntent(resultCode, data)
+                val cb = filePathCallback
+                filePathCallback = null
+                try { cb?.onReceiveValue(results) } catch (_: Exception) {}
+                return
+            }
+            if (requestCode == NATIVE_FILE_CHOOSER_REQUEST_CODE) {
+                val results = extractUrisFromIntent(resultCode, data)
+                val cb = nativeFilePathCallback
+                nativeFilePathCallback = null
+                try { cb?.onReceiveValue(results) } catch (_: Exception) {}
+                return
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "onActivityResult error: ${e.message}")
+            try { filePathCallback?.onReceiveValue(null) } catch (_: Exception) {}
+            try { nativeFilePathCallback?.onReceiveValue(null) } catch (_: Exception) {}
+            filePathCallback = null
+            nativeFilePathCallback = null
+        }
+    }
+
+    override fun onDestroy() {
+        try { CookieManager.getInstance().flush() } catch (_: Exception) {}
+        isActivityVisible = false
+        try { filePathCallback?.onReceiveValue(null) } catch (_: Exception) {}
+        try { nativeFilePathCallback?.onReceiveValue(null) } catch (_: Exception) {}
+        filePathCallback = null
+        nativeFilePathCallback = null
+        try { htmlIntegrityCheckRunnable?.let { mainHandler.removeCallbacks(it) } } catch (_: Exception) {}
+        try { mainHandler.removeCallbacks(copyBtnInjector) } catch (_: Exception) {}
+        try { mainHandler.removeCallbacksAndMessages(null) } catch (_: Exception) {}
+        try { if (::liveChecker.isInitialized) liveChecker.destroy() } catch (_: Exception) {}
+        try { if (::numberChecker.isInitialized) numberChecker.destroy() } catch (_: Exception) {}
+        try { clearProxyOverride() } catch (_: Exception) {}
+        super.onDestroy()
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  INNER BRIDGES
+    // ═══════════════════════════════════════════════════════════
+    inner class SheetBridge {
+        @JavascriptInterface fun saveToSheet(uid: String, pass: String, cookies: String, hotmail: String, twofa: String): Boolean =
+            this@MainActivity.saveToSheet(uid, pass, cookies, hotmail, twofa)
+        @JavascriptInterface fun getSheetJson(): String = this@MainActivity.getSheetJson()
+        @JavascriptInterface fun getSavedAccounts(): String = this@MainActivity.getSheetJson()
+        @JavascriptInterface fun getSheetCount(): Int = this@MainActivity.getSheetCount()
+        @JavascriptInterface fun exportSheetAsXLSX() { this@MainActivity.runOnUiThread { this@MainActivity.exportSheetAsXLSX() } }
+        @JavascriptInterface fun exportBackupAsXLSX(json: String) { this@MainActivity.runOnUiThread { this@MainActivity.exportBackupAsXLSX(json) } }
+        @JavascriptInterface fun clearSheetAll(): Boolean = this@MainActivity.clearSheetAll()
+        @JavascriptInterface fun clearSheetData(): Boolean = this@MainActivity.clearSheetAll()
+        @JavascriptInterface fun undoLastSave(uid: String): Boolean = this@MainActivity.undoLastSave(uid)
+        @JavascriptInterface fun deleteSavedAccount(uid: String): Boolean = this@MainActivity.undoLastSave(uid)
+        @JavascriptInterface fun getLastSavedUid(): String = this@MainActivity.lastSavedUid
+        @JavascriptInterface fun getSheetMode(): Int = this@MainActivity.getCurrentSheetModePublic()
+        @JavascriptInterface fun setSheetMode(mode: Int) { this@MainActivity.setCurrentSheetMode(mode) }
+        @JavascriptInterface fun getUidFromCookies(): String = this@MainActivity.getUidFromCookiesPublic()
+        @JavascriptInterface fun getCookies(): String = this@MainActivity.getInstagramCookiesPublic()
+        @JavascriptInterface fun getSavedPassword(): String = this@MainActivity.currentMailPassword.ifBlank { this@MainActivity.savedPassword }
+        @JavascriptInterface fun savePassword(pwd: String) {
+            if (pwd.isNotBlank()) this@MainActivity.currentMailPassword = pwd
+            this@MainActivity.savePassword(pwd)
+        }
+
+        @JavascriptInterface fun getLastGeneratedUsername(): String = this@MainActivity.fetchLastGeneratedUsername()
+        @JavascriptInterface fun exportSheetToFile(fileName: String, mode: String): Boolean =
+            this@MainActivity.exportSheetToFile(fileName, mode)
+        @JavascriptInterface fun moveToRecovery(json: String): Boolean = this@MainActivity.moveToRecovery(json)
+        @JavascriptInterface fun getRecoveryList(): String = this@MainActivity.getRecoveryList()
+        @JavascriptInterface fun purgeExpiredRecovery() { this@MainActivity.purgeExpiredRecovery() }
+        @JavascriptInterface fun restoreRecoveryItem(idx: Int): Boolean = this@MainActivity.restoreRecoveryItem(idx)
+        @JavascriptInterface fun recoverSheetData(): Boolean = this@MainActivity.restoreRecoveryItem(0)
+
+        @JavascriptInterface fun saveFileToDownloadsImpl(filename: String, mimeType: String, data: String): Boolean =
+            this@MainActivity.saveFileToDownloadsImpl(filename, mimeType, data)
+        @JavascriptInterface fun saveFileToDownloads(filename: String, mimeType: String, data: String): Boolean =
+            this@MainActivity.saveFileToDownloadsImpl(filename, mimeType, data)
+        @JavascriptInterface fun downloadFile(filename: String, data: String): Boolean =
+            this@MainActivity.saveFileToDownloadsImpl(filename, "text/plain", data)
+        @JavascriptInterface fun downloadTxt(filename: String, data: String): Boolean =
+            this@MainActivity.saveFileToDownloadsImpl(filename, "text/plain", data)
+
+        @JavascriptInterface fun addMetaPool(text: String): String = this@MainActivity.addMetaPoolNative(text)
+        @JavascriptInterface fun saveMetaPool(text: String): String = this@MainActivity.saveMetaPoolNative(text)
+        @JavascriptInterface fun getMeta(): String = this@MainActivity.getFreshMetaNative()
+        @JavascriptInterface fun peekFreshMeta(): String = this@MainActivity.peekFreshMetaNative()
+        @JavascriptInterface fun getMetaStats(): String = this@MainActivity.getMetaStatsNative()
+        @JavascriptInterface fun getMetaList(): String = this@MainActivity.getMetaListNative()
+        @JavascriptInterface fun clearMetaPool(): Boolean = this@MainActivity.clearMetaPoolNative()
+        @JavascriptInterface fun resetMetaPool(): Boolean = this@MainActivity.resetMetaPoolNative()
+        @JavascriptInterface fun removeMeta(phone: String): Boolean = this@MainActivity.removeMetaNative(phone)
+        @JavascriptInterface fun saveMeta2FA(phone: String, secret: String): Boolean = this@MainActivity.saveMeta2FANative(phone, secret)
+        @JavascriptInterface fun getMeta2FA(phone: String): String = this@MainActivity.getMeta2FANative(phone)
+        @JavascriptInterface fun getCurrentMetaPhone(): String = this@MainActivity.getCurrentMetaPhone()
+        @JavascriptInterface fun getCurrentMetaPassword(): String = this@MainActivity.getCurrentMetaPassword()
+        @JavascriptInterface fun getCurrentMeta2FA(): String = this@MainActivity.getCurrentMeta2FA()
+
+        @JavascriptInterface fun getMetaListNative(): String = this@MainActivity.getMetaListNative()
+        @JavascriptInterface fun getMetaStatsNative(): String = this@MainActivity.getMetaStatsNative()
+        @JavascriptInterface fun addMetaPoolNative(text: String): String = this@MainActivity.addMetaPoolNative(text)
+        @JavascriptInterface fun saveMetaPoolJsonNative(json: String): Boolean = this@MainActivity.saveMetaPoolJsonNative(json)
+        @JavascriptInterface fun clearMetaPoolNative(): Boolean = this@MainActivity.clearMetaPoolNative()
+        @JavascriptInterface fun resetMetaPoolNative(): Boolean = this@MainActivity.resetMetaPoolNative()
+        @JavascriptInterface fun markMetaBrokenNative(phone: String): Boolean = this@MainActivity.markMetaBrokenNative(phone)
+
+        @JavascriptInterface fun getManualNumber(rid: String) { this@MainActivity.runOnUiThread { this@MainActivity.requestNumberFromPanel(rid) } }
+        @JavascriptInterface fun loadRanges() { this@MainActivity.runOnUiThread { this@MainActivity.fetchRangesFromPanel() } }
+        @JavascriptInterface fun getSavedRange(): String = this@MainActivity.getSavedRange()
+        @JavascriptInterface fun saveSelectedRange(json: String) { this@MainActivity.runOnUiThread { this@MainActivity.saveSelectedRange(json) } }
+
+        @JavascriptInterface fun copyToClipboard(text: String) { this@MainActivity.copyToClipboard(text, "Copied") }
+        @JavascriptInterface fun copyCurrentUsername() { this@MainActivity.runOnUiThread { this@MainActivity.copyCurrentUsername() } }
+        @JavascriptInterface fun setUiOverlay(active: Boolean) {
+            this@MainActivity.runOnUiThread {
+                if (this@MainActivity.isFinishing || this@MainActivity.isDestroyed) return@runOnUiThread
+                try {
+                    this@MainActivity.uiOverlayActive = active || this@MainActivity.telegramPopupLocked
+                    if (this@MainActivity.uiOverlayActive && ::nativeWebView.isInitialized) {
+                        this@MainActivity.nativeWebSuppressed = true
+                        this@MainActivity.nativeWebView.visibility = View.INVISIBLE
+                    }
+                    this@MainActivity.updateNativeTgFabVisibility()
+                } catch (_: Exception) {}
+            }
+        }
+        @JavascriptInterface fun setTelegramLocked(locked: Boolean) {
+            this@MainActivity.runOnUiThread {
+                if (!this@MainActivity.isFinishing && !this@MainActivity.isDestroyed) {
+                    this@MainActivity.setTelegramPopupLockState(locked)
+                }
+            }
+        }
+        @JavascriptInterface fun setTelegramTaskEnabled(enabled: Boolean) {
+            this@MainActivity.telegramTaskEnabled = enabled
+            this@MainActivity.updateNativeTgFabVisibility()
+        }
+        @JavascriptInterface fun onTelegramTaskTriggered() {
+            this@MainActivity.runOnUiThread {
+                this@MainActivity.openTelegramOverlayInHtml(DEFAULT_TG_LOGIN_URL)
+            }
+        }
+        @JavascriptInterface fun hideTelegramPopupIfClosed() {
+            this@MainActivity.closeTelegramOverlayAndRestoreInsta()
+        }
+        @JavascriptInterface fun setBackButtonBlocked(blocked: Boolean) {
+            this@MainActivity.backButtonBlocked = blocked || this@MainActivity.telegramPopupLocked
+        }
+        @JavascriptInterface fun openTelegramBotWindow() {
+            this@MainActivity.openTelegramOverlayInHtml(DEFAULT_TG_LOGIN_URL)
+        }
+        @JavascriptInterface fun openTelegramInPopup(url: String): Boolean {
+            this@MainActivity.openTelegramOverlayInHtml(url.ifBlank { DEFAULT_TG_LOGIN_URL })
+            return true
+        }
+        @JavascriptInterface fun loadTelegramLoginUrl(url: String): Boolean {
+            this@MainActivity.openTelegramOverlayInHtml(url.ifBlank { DEFAULT_TG_LOGIN_URL })
+            return true
+        }
+        @JavascriptInterface fun setTelegramPopupUrl(url: String): Boolean {
+            if (url.isNotBlank()) this@MainActivity.pendingTelegramUrl = url.trim()
+            return true
+        }
+        @JavascriptInterface fun triggerTelegramBotTask() {
+            this@MainActivity.runOnUiThread { this@MainActivity.triggerHtmlTelegramTaskHook() }
+        }
+        @JavascriptInterface fun startBotTaskInTelegram() {
+            this@MainActivity.runOnUiThread { this@MainActivity.triggerHtmlTelegramTaskHook() }
+        }
+        @JavascriptInterface fun clearTelegramSession() {
+            this@MainActivity.clearTelegramSession()
+        }
+
+        @JavascriptInterface fun setFloatingBubbleEnabled(enabled: Boolean) {
+            this@MainActivity.setFloatingBubbleEnabled(enabled)
+        }
+        @JavascriptInterface fun isFloatingBubbleEnabled(): Boolean =
+            this@MainActivity.isFloatingBubbleEnabled()
+
+        @JavascriptInterface fun hideNativeWeb() {
+            this@MainActivity.runOnUiThread {
+                if (this@MainActivity.isFinishing || this@MainActivity.isDestroyed) return@runOnUiThread
+                try {
+                    this@MainActivity.nativeWebSuppressed = true
+                    if (::nativeWebView.isInitialized) nativeWebView.visibility = View.INVISIBLE
+                    this@MainActivity.updateNativeTgFabVisibility()
+                } catch (_: Exception) {}
+            }
+        }
+        @JavascriptInterface fun showNativeWeb() {
+            this@MainActivity.runOnUiThread {
+                if (this@MainActivity.isFinishing || this@MainActivity.isDestroyed) return@runOnUiThread
+                try {
+                    if (!this@MainActivity.uiOverlayActive &&
+                        !this@MainActivity.telegramPopupLocked &&
+                        !this@MainActivity.isBrowserModeOpen &&
+                        ::nativeWebView.isInitialized
+                    ) {
+                        this@MainActivity.nativeWebSuppressed = false
+                        nativeWebView.visibility = View.VISIBLE
+                        nativeWebView.translationX = 0f
+                        nativeWebView.translationY = 0f
+                    }
+                    this@MainActivity.bringTelegramFabToFront()
+                } catch (_: Exception) {}
+            }
+        }
+
+        @JavascriptInterface fun setNativeWebBounds(left: Float, top: Float, width: Float, height: Float) {
+            this@MainActivity.runOnUiThread {
+                if (this@MainActivity.isFinishing || this@MainActivity.isDestroyed || !::nativeWebView.isInitialized) return@runOnUiThread
+                try {
+                    if (this@MainActivity.uiOverlayActive || this@MainActivity.telegramPopupLocked) {
+                        nativeWebView.visibility = View.INVISIBLE
+                        return@runOnUiThread
+                    }
+                    val parent = nativeWebView.parent as? ViewGroup
+                    parent?.clipChildren = true
+                    parent?.clipToPadding = true
+
+                    val refW = if (::mainWebView.isInitialized && mainWebView.width > 0) mainWebView.width
+                    else (parent?.width ?: window.decorView.width)
+                    val refH = if (::mainWebView.isInitialized && mainWebView.height > 0) mainWebView.height
+                    else (parent?.height ?: window.decorView.height)
+                    if (refW <= 0 || refH <= 0) return@runOnUiThread
+
+                    val l = (left * refW).toInt().coerceIn(0, refW - 1)
+                    val t = (top * refH).toInt().coerceIn(0, refH - 1)
+                    val w = (width * refW).toInt().coerceAtLeast(1).coerceAtMost(refW - l)
+                    val h = (height * refH).toInt().coerceAtLeast(1).coerceAtMost(refH - t)
+
+                    val lp = FrameLayout.LayoutParams(w, h)
+                    lp.leftMargin = l
+                    lp.topMargin = t
+                    nativeWebView.layoutParams = lp
+                    nativeWebView.requestLayout()
+                    this@MainActivity.bringTelegramFabToFront()
+                } catch (_: Exception) {}
+            }
+        }
+
+        @JavascriptInterface fun loadInNativeWeb(url: String) {
+            this@MainActivity.runOnUiThread {
+                if (this@MainActivity.isFinishing || this@MainActivity.isDestroyed) return@runOnUiThread
+                try {
+                    if (url.contains("telegram.org")) {
+                        this@MainActivity.openTelegramOverlayInHtml(url)
+                        return@runOnUiThread
+                    }
+                    this@MainActivity.prepareNativeWebForAutomation()
+                    if (::nativeWebView.isInitialized) nativeWebView.loadUrl(url)
+                    this@MainActivity.bringTelegramFabToFront()
+                } catch (_: Exception) {}
+            }
+        }
+        @JavascriptInterface fun reloadNativeWeb() {
+            this@MainActivity.runOnUiThread {
+                try { if (::nativeWebView.isInitialized) nativeWebView.reload() } catch (_: Exception) {}
+            }
+        }
+
+        @JavascriptInterface fun clearWebInstant() {
+            this@MainActivity.clearWebInstant()
+        }
+
+        @JavascriptInterface fun loginWithCookies(ck: String) { this@MainActivity.loginWithCookies(ck) }
+        @JavascriptInterface fun setCookies(ck: String) { this@MainActivity.loginWithCookies(ck) }
+        @JavascriptInterface fun applyDarkMode(on: Boolean) { this@MainActivity.darkModeEnabled = on }
+        @JavascriptInterface fun isDarkMode(): Boolean = this@MainActivity.darkModeEnabled
+
+        @JavascriptInterface fun get2FAKey(): String = this@MainActivity.current2FAKey
+        @JavascriptInterface fun set2FAKey(key: String) {
+            this@MainActivity.current2FAKey = key.trim()
+            this@MainActivity.saveCurrentMail()
+        }
+        @JavascriptInterface fun generate2FACodeFromKey(): String = this@MainActivity.generate2FACodeFromKey()
+        @JavascriptInterface fun generate2FACodeFromKeyInput(rawKey: String): String =
+            this@MainActivity.generate2FACodeFromKeyInput(rawKey)
+        @JavascriptInterface fun startTwoFactorAutomation() {
+            this@MainActivity.runOnUiThread { this@MainActivity.startTwoFactorAutomation() }
+        }
+        @JavascriptInterface fun getFullHotmailKey(): String = this@MainActivity.savedHotmailKey
+        @JavascriptInterface fun setFullHotmailKey(key: String) { this@MainActivity.savedHotmailKey = key }
+        @JavascriptInterface fun getCurrentFullKey(): String = this@MainActivity.currentMailFullKey
+
+        @JavascriptInterface fun setBrowserProxy(ip: String, port: String, user: String, pass: String) {
+            this@MainActivity.runOnUiThread { this@MainActivity.setBrowserProxy(ip, port, user, pass) }
+        }
+        @JavascriptInterface fun togglePage1Proxy(enabled: Boolean) {
+            this@MainActivity.runOnUiThread { this@MainActivity.togglePage1Proxy(enabled) }
+        }
+        @JavascriptInterface fun togglePage2Proxy(enabled: Boolean) {
+            this@MainActivity.runOnUiThread { this@MainActivity.togglePage2Proxy(enabled) }
+        }
+
+        @JavascriptInterface fun testProxyCredentials(ip: String, port: String, user: String, pass: String): String {
+            this@MainActivity.setBrowserProxy(ip, port, user, pass)
+            return "Proxy saved ($ip:$port)"
+        }
+
+        @JavascriptInterface fun startIgAutomation(phone: String, pass: String) {
+            this@MainActivity.startIgAutomation(phone, pass)
+        }
+        @JavascriptInterface fun startIgAutomationWith2FA(phone: String, pass: String, twofa: String) {
+            this@MainActivity.current2FAKey = twofa
+            if (pass.isNotBlank()) {
+                this@MainActivity.currentMailPassword = pass
+                this@MainActivity.savePassword(pass)
+            }
+            this@MainActivity.saveCurrentMail()
+            this@MainActivity.startIgAutomation(phone, pass)
+        }
+        @JavascriptInterface fun loginWithAccount(json: String): Boolean {
+            return try {
+                val o = JSONObject(json)
+                val ck = o.optString("cookies")
+                val uid = o.optString("uid")
+                val pwd = o.optString("pass")
+                val tfa = o.optString("twofa")
+                if (tfa.isNotBlank()) this@MainActivity.current2FAKey = tfa
+                if (ck.isNotBlank()) { this@MainActivity.loginWithCookies(ck); true }
+                else if (uid.isNotBlank() && pwd.isNotBlank()) { this@MainActivity.startIgAutomation(uid, pwd); true }
+                else false
+            } catch (_: Exception) { false }
+        }
+
+        @JavascriptInterface fun toggleMetaMode(enabled: Boolean) {
+            this@MainActivity.isMetaModeEnabled = enabled
+            this@MainActivity.runOnUiThread {
+                toast("Meta Mode: " + if (enabled) "ON" else "OFF")
+                if (enabled) this@MainActivity.clearLoginFields()
+            }
+        }
+
+        @JavascriptInterface fun setNameMode(mode: String) { this@MainActivity.setNameModePublic(mode) }
+
+        @JavascriptInterface fun startCreateIgProcess() {
+            this@MainActivity.runOnUiThread {
+                if (this@MainActivity.isFinishing || this@MainActivity.isDestroyed) return@runOnUiThread
+                try {
+                    try { if (::igAutomation.isInitialized) igAutomation.forceReset() } catch (_: Exception) {}
+                    this@MainActivity.prepareNativeWebForAutomation()
+                    this@MainActivity.ensureInstagramLoginPage()
+
+                    val metaJson = this@MainActivity.getFreshMetaNative()
+                    if (metaJson.trim() != "{}" && metaJson.trim().isNotEmpty()) {
+                        try {
+                            val obj = JSONObject(metaJson)
+                            val phone = obj.optString("phone", "")
+                            val pass = obj.optString("password", "")
+                            val twofa = obj.optString("twofa", "")
+                            if (phone.isNotBlank() && pass.isNotBlank()) {
+                                this@MainActivity.currentNumber = phone
+                                this@MainActivity.currentMailPassword = pass
+                                this@MainActivity.savePassword(pass)
+                                this@MainActivity.current2FAKey = twofa
+                                this@MainActivity.saveCurrentMail()
+                                this@MainActivity.autoRegActive = true
+                                if (::igAutomation.isInitialized) {
+                                    igAutomation.startAutomation(phone, pass, twofa)
+                                }
+                                fillInstagramLogin(phone, pass)
+                                toast("▶️ Meta automation: $phone")
+                                return@runOnUiThread
+                            }
+                        } catch (e: Exception) {
+                            toast("❌ Meta data error: ${e.message}")
+                        }
+                    }
+
+                    val activePass = this@MainActivity.savedPassword.ifBlank { this@MainActivity.currentMailPassword }
+                    if (this@MainActivity.currentNumber.isBlank() || activePass.isBlank()) {
+                        toast("❌ No fresh Meta & no number/password set")
+                        return@runOnUiThread
+                    }
+                    this@MainActivity.currentMailPassword = activePass
+                    this@MainActivity.savePassword(activePass)
+                    this@MainActivity.saveCurrentMail()
+                    this@MainActivity.autoRegActive = true
+                    if (::igAutomation.isInitialized) {
+                        igAutomation.startAutomation(
+                            this@MainActivity.currentNumber,
+                            activePass,
+                            this@MainActivity.current2FAKey
+                        )
+                    }
+                    fillInstagramLogin(this@MainActivity.currentNumber, activePass)
+                    toast("▶️ Manual automation: ${this@MainActivity.currentNumber}")
+                } catch (e: Exception) {
+                    Log.e(TAG, "startCreateIgProcess error: ${e.message}")
+                    toast("Automation start error")
+                }
+            }
+        }
+
+        @JavascriptInterface fun setActivePage(page: String) { this@MainActivity.setActivePageInternal(page) }
+        @JavascriptInterface fun getActivePage(): String = this@MainActivity.getActivePageInternal()
+
+        @JavascriptInterface fun copyCurrentCookies() {
+            this@MainActivity.runOnUiThread { this@MainActivity.copyCurrentCookiesInternal() }
+        }
+
+        @JavascriptInterface fun copyCookies() {
+            this@MainActivity.runOnUiThread { this@MainActivity.copyCurrentCookiesInternal() }
+        }
+
+        @JavascriptInterface fun loginWithCurrentMeta() {
+            this@MainActivity.runOnUiThread {
+                if (this@MainActivity.isFinishing || this@MainActivity.isDestroyed) return@runOnUiThread
+                try {
+                    val fresh = this@MainActivity.getFreshMetaNative()
+                    if (fresh.trim() == "{}" || fresh.trim().isEmpty()) {
+                        toast("No fresh Meta — Set Meta first")
+                        return@runOnUiThread
+                    }
+                    val o = JSONObject(fresh)
+                    val phone = o.optString("phone", "")
+                    val pwd = o.optString("password", "")
+                    val twofa = o.optString("twofa", "")
+                    if (phone.isBlank() || pwd.isBlank()) {
+                        toast("Invalid Meta account")
+                        return@runOnUiThread
+                    }
+                    this@MainActivity.currentNumber = phone
+                    this@MainActivity.currentMailPassword = pwd
+                    this@MainActivity.savePassword(pwd)
+                    this@MainActivity.current2FAKey = twofa
+                    this@MainActivity.saveCurrentMail()
+                    this@MainActivity.autoRegActive = true
+                    this@MainActivity.prepareNativeWebForAutomation()
+                    this@MainActivity.ensureInstagramLoginPage()
+                    if (::igAutomation.isInitialized) {
+                        igAutomation.startAutomation(phone, pwd, twofa)
+                    }
+                    fillInstagramLogin(phone, pwd)
+                } catch (e: Exception) { toast("Login failed: ${e.message}") }
+            }
+        }
+
+        @JavascriptInterface fun onUsernameGenerated(username: String) {
+            this@MainActivity.lastGeneratedUsername = username
+            try {
+                val sUser = esc(username)
+                this@MainActivity.runOnUiThread {
+                    if (!isFinishing && !isDestroyed && ::mainWebView.isInitialized) {
+                        mainWebView.evaluateJavascript(
+                            "(function(){try{if(window.TP&&window.TP.setGeneratedUsername)window.TP.setGeneratedUsername('$sUser');}catch(e){}})();",
+                            null
+                        )
+                    }
+                }
+            } catch (_: Exception) {}
+            this@MainActivity.copyToClipboard(username, "Username Copied: $username")
+        }
+
+        @JavascriptInterface fun onPasswordGenerated(password: String) {
+            if (password.isNotBlank()) {
+                this@MainActivity.currentMailPassword = password
+                this@MainActivity.savePassword(password)
+                this@MainActivity.saveCurrentMail()
+            }
+        }
+
+        @JavascriptInterface fun notifyAutoDone() {
+            this@MainActivity.runOnUiThread {
+                try { if (::igAutomation.isInitialized) igAutomation.markComplete() } catch (_: Exception) {}
+            }
+        }
+
+        @JavascriptInterface fun onIgAutomationComplete() {
+            this@MainActivity.runOnUiThread {
+                if (this@MainActivity.isFinishing || this@MainActivity.isDestroyed) return@runOnUiThread
+                try {
+                    try { CookieManager.getInstance().flush() } catch (_: Exception) {}
+                    this@MainActivity.mainHandler.postDelayed({
+                        if (this@MainActivity.isFinishing || this@MainActivity.isDestroyed) return@postDelayed
+                        try {
+                            val username = this@MainActivity.lastGeneratedUsername
+                            val pass = this@MainActivity.currentMailPassword.ifBlank { this@MainActivity.savedPassword }
+                            val twofa = this@MainActivity.current2FAKey
+                            val cookies = this@MainActivity.getInstagramCookiesPublic()
+
+                            if (cookies.isNotBlank() && ::mainWebView.isInitialized) {
+                                val sCk = esc(cookies)
+                                mainWebView.evaluateJavascript(
+                                    "(function(){try{if(window.TP&&window.TP.setCookiesData)window.TP.setCookiesData('$sCk');}catch(e){}})();",
+                                    null
+                                )
+                            }
+                            try { TelegramBotActivity.notifyAccountReadyForSubmission(cookies, twofa) } catch (_: Exception) {}
+
+                            if (username.isNotBlank()) {
+                                this@MainActivity.saveToSheet(username, pass, cookies, "", twofa)
+                                toast("✅ Account Created & Saved: $username")
+                            } else {
+                                toast("⚠️ Account created but username not found")
+                            }
+                        } catch (_: Exception) {}
+                    }, 1000)
+                    try { if (::igAutomation.isInitialized) igAutomation.markComplete() } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    toast("Save error: ${e.message}")
+                }
+            }
+        }
+
+        @JavascriptInterface fun stopAutomation() {
+            this@MainActivity.runOnUiThread {
+                this@MainActivity.autoRegActive = false
+                try { if (::igAutomation.isInitialized) igAutomation.stopAutomation() } catch (_: Exception) {}
+            }
+        }
+
+        @JavascriptInterface fun showFloatingBubble() {
+            this@MainActivity.runOnUiThread { this@MainActivity.showFloatingBubble(minimizeApp = true) }
+        }
+
+        @JavascriptInterface fun saveProxy(ip: String, port: String, user: String, pass: String) {
+            this@MainActivity.runOnUiThread { this@MainActivity.setBrowserProxy(ip, port, user, pass) }
+        }
+        @JavascriptInterface fun setProxy(enable: Boolean) {
+            this@MainActivity.runOnUiThread { this@MainActivity.togglePage1Proxy(enable) }
+        }
+
+        @JavascriptInterface fun saveHotmailPool(text: String): String {
+            return try {
+                if (!::hotmailPool.isInitialized) return """{"added":0,"fresh":0,"total":0}"""
+                runBlocking(Dispatchers.IO) {
+                    val current = hotmailPool.addAndCheckFreshOnly(text)
+                    """{"added":${current.addedFresh},"fresh":${current.poolFresh},"total":${current.poolTotal}}"""
+                }
+            } catch (_: Exception) { """{"added":0,"fresh":0,"total":0}""" }
+        }
+        @JavascriptInterface fun getHotmailStats(): String =
+            try { if (::hotmailPool.isInitialized) hotmailPool.getStatsJson() else "{}" } catch (_: Exception) { "{}" }
+        @JavascriptInterface fun clearHotmailPool(): Boolean =
+            try { if (::hotmailPool.isInitialized) hotmailPool.clearAll() else false } catch (_: Exception) { false }
+
+        @JavascriptInterface fun getOtpHistory(): String = "[]"
+        @JavascriptInterface fun clearOtpHistory() {}
+
+        @JavascriptInterface fun getMail() {
+            try {
+                if (!::hotmailPool.isInitialized) { toast("Mail pool unavailable"); return }
+                val mail = hotmailPool.getInstantFreshMail()
+                if (mail.isNotEmpty()) {
+                    val email = mail.split("|").getOrNull(0) ?: ""
+                    runOnUiThread {
+                        if (!isFinishing && !isDestroyed && ::mainWebView.isInitialized) {
+                            mainWebView.evaluateJavascript("window.TP.onEmailOnly('$email')", null)
+                        }
+                        toast("Got Mail: $email")
+                    }
+                } else toast("No fresh mail found")
+            } catch (_: Exception) { toast("Mail fetch failed") }
+        }
+    }
+
+    inner class BrowserBridge {
+        @JavascriptInterface fun open(mode: String, lang: String, ua: String) {}
+        @JavascriptInterface fun close() {}
+        @JavascriptInterface fun clear() { this@MainActivity.clearWebInstant() }
+        @JavascriptInterface fun reload() {}
+        @JavascriptInterface fun setProxy(ip: String, port: String, user: String, pass: String) {
+            this@MainActivity.runOnUiThread { this@MainActivity.setBrowserProxy(ip, port, user, pass) }
+        }
+        @JavascriptInterface fun toggleProxy(enabled: Boolean) {
+            this@MainActivity.runOnUiThread { this@MainActivity.togglePage2Proxy(enabled) }
+        }
+        @JavascriptInterface fun getProxyIp(): String = currentProxyIp
+        @JavascriptInterface fun getProxyPort(): String = currentProxyPort
+        @JavascriptInterface fun getProxyUser(): String = currentProxyUser
+        @JavascriptInterface fun getProxyPass(): String = currentProxyPass
+        @JavascriptInterface fun isProxyEnabled(): Boolean = page2ProxyEnabled
+        @JavascriptInterface fun isProxyActive(): Boolean = proxyActuallyActive
+        @JavascriptInterface fun setAutoLogin(enabled: Boolean) { this@MainActivity.autoLoginEnabled = enabled }
+    }
+
+    fun setCurrentSheetMode(mode: Int) {
+        val safe = if (mode < 1 || mode > 5) 1 else mode
+        try { getSharedPreferences(SHEET_MODE_PREFS, MODE_PRIVATE).edit().putInt(KEY_SHEET_MODE, safe).apply() }
+        catch (_: Exception) {}
+    }
+
+    fun getCurrentSheetModePublic(): Int {
+        return try {
+            getSharedPreferences(SHEET_MODE_PREFS, MODE_PRIVATE).getInt(KEY_SHEET_MODE, 1).let { if (it < 1 || it > 5) 1 else it }
+        } catch (_: Exception) { 1 }
+    }
+
+    fun getCurrentMailFullKeyPublic(): String = currentMailFullKey
+    fun getCurrentMail(): String = currentMail
+    fun getLastSavedUidPublic(): String = lastSavedUid
+}
+
+data class MetaAccount(
+    val phone: String,
+    var password: String,
+    var twofa: String,
+    var status: String,
+    var addedAt: Long
+)
+
+class LiveUidChecker(private val ctx: Context) {
+    fun destroy() {}
+    fun checkAllUidsManually(uids: List<String>, callback: (Map<String, Boolean>) -> Unit) {
+        callback(uids.associateWith { false })
+    }
+}
+
+class FacebookNumberChecker(private val ctx: Context) {
+    fun resetSession() {}
+    fun isEnabled(): Boolean = false
+    fun isActive(): Boolean = false
+    fun destroy() {}
+    fun setEnabled(e: Boolean) {}
+    fun clearCache() {}
+    fun getCheckedCount(): Int = 0
+    fun getMaxLimit(): Int = 0
+}

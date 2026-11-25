@@ -1,0 +1,6 @@
+{
+  "name": "TrustPoint",
+  "description": "TrustPoint BD automation workspace with floating overlay controls, background keep-alive service, multi-session WebView, proxy, 2FA, and persistent account storage.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

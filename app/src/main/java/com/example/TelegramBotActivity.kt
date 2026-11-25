@@ -1,0 +1,816 @@
+package com.example
+
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.Intent
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AppCompatActivity
+import java.lang.ref.WeakReference
+
+class TelegramBotActivity : AppCompatActivity() {
+
+    private lateinit var mainWebView: WebView
+    private lateinit var tgLoginWebView: WebView
+    private lateinit var tgPopupCard: LinearLayout
+    private lateinit var btnFloatTg: Button
+    private lateinit var tvStatus: TextView
+    private lateinit var btnLockBot: Button
+    private lateinit var btnCreateIg: Button
+    private lateinit var btnSubmitResult: Button
+
+    private val handler = Handler(Looper.getMainLooper())
+    private var isPopupVisible = false
+    private var isPopupExpanded = false
+    private var tgLoadedOnce = false
+
+    @Volatile private var isBotLocked = false
+    @Volatile private var lockedBotSlug: String = ""
+    @Volatile private var lockedBotUrl: String = ""
+    @Volatile private var pendingTaskRaw: String = ""
+    @Volatile private var pendingName: String = ""
+    @Volatile private var pendingPass: String = ""
+    @Volatile private var isTaskInProgress = false
+
+    companion object {
+        private const val PREFS_NAME = "ir_tg_bot_prefs"
+        private const val KEY_LOCKED = "tg_bot_locked"
+        private const val KEY_BOT_SLUG = "tg_bot_slug"
+        private const val KEY_BOT_URL = "tg_bot_url"
+        private const val TG_WEB_URL = "https://web.telegram.org/k/"
+        private const val DEFAULT_WEB_URL = "https://www.instagram.com/accounts/login/?mtn"
+
+        private var hostActivityRef: WeakReference<MainActivity>? = null
+
+        fun attachHostActivity(activity: MainActivity) {
+            hostActivityRef = WeakReference(activity)
+        }
+
+        fun open(context: Context, hostActivity: MainActivity? = null) {
+            if (hostActivity != null) {
+                hostActivityRef = WeakReference(hostActivity)
+            }
+            val intent = Intent(context, TelegramBotActivity::class.java)
+            if (context !is AppCompatActivity) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        }
+
+        fun notifyAccountReadyForSubmission(cookies: String, twoFa: String) {
+            val host = hostActivityRef?.get() ?: return
+            if (host.isFinishing || host.isDestroyed) return
+            host.runOnUiThread {
+                try {
+                    val prefs = host.getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                    prefs.edit()
+                        .putString("last_ig_cookies", cookies)
+                        .putString("last_ig_2fa", twoFa)
+                        .apply()
+                    if (twoFa.isNotBlank()) {
+                        host.pushTwoFaKeyToHtml(twoFa)
+                    }
+                    host.syncSheetDataToHtml()
+                    AutomationRuntimeState.logExecution(
+                        host,
+                        "TelegramSync",
+                        "INFO",
+                        "Synced captured cookies (${cookies.length} chars) & 2FA key"
+                    )
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        restoreBotLockState()
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#0F172A"))
+        }
+
+        tvStatus = TextView(this).apply {
+            text = if (isBotLocked && lockedBotSlug.isNotBlank()) {
+                "🔒 Locked Bot: @$lockedBotSlug | Session Active"
+            } else {
+                "🔓 Telegram ডান দিকের বাটনে চাপুন — উপরে ছোট পপআপ খুলবে"
+            }
+            setTextColor(Color.WHITE)
+            textSize = 12f
+            setPadding(dp(12), dp(8), dp(12), dp(4))
+        }
+        root.addView(tvStatus)
+
+        val scrollBar = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            setPadding(dp(8), dp(2), dp(8), dp(6))
+        }
+
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        btnLockBot = Button(this).apply {
+            text = if (isBotLocked) "🔒 Locked (@$lockedBotSlug)" else "🔓 Lock Bot"
+            isAllCaps = false
+            textSize = 12f
+            setBackgroundColor(if (isBotLocked) Color.parseColor("#15803D") else Color.parseColor("#2563EB"))
+            setTextColor(Color.WHITE)
+            setPadding(dp(10), dp(4), dp(10), dp(4))
+            setOnClickListener { toggleLockCurrentBot() }
+        }
+
+        btnCreateIg = Button(this).apply {
+            text = "▶️ Create IG"
+            isAllCaps = false
+            textSize = 12f
+            setBackgroundColor(Color.parseColor("#7C3AED"))
+            setTextColor(Color.WHITE)
+            setPadding(dp(10), dp(4), dp(10), dp(4))
+            setOnClickListener { startSingleTaskFromBot() }
+        }
+
+        btnSubmitResult = Button(this).apply {
+            text = "📤 Submit 2FA & Cookies"
+            isAllCaps = false
+            textSize = 12f
+            setBackgroundColor(Color.parseColor("#0D9488"))
+            setTextColor(Color.WHITE)
+            setPadding(dp(10), dp(4), dp(10), dp(4))
+            setOnClickListener { submit2FaAndCookiesToBot() }
+        }
+
+        val btnBackMain = Button(this).apply {
+            text = "↩️ Main"
+            isAllCaps = false
+            textSize = 12f
+            setBackgroundColor(Color.parseColor("#334155"))
+            setTextColor(Color.WHITE)
+            setPadding(dp(10), dp(4), dp(10), dp(4))
+            setOnClickListener { finish() }
+        }
+
+        val lp = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            dp(36)
+        ).apply { setMargins(dp(4), 0, dp(4), 0) }
+
+        btnRow.addView(btnLockBot, lp)
+        btnRow.addView(btnCreateIg, lp)
+        btnRow.addView(btnSubmitResult, lp)
+        btnRow.addView(btnBackMain, lp)
+        scrollBar.addView(btnRow)
+        root.addView(scrollBar)
+
+        val webContainer = FrameLayout(this).apply {
+            setBackgroundColor(Color.parseColor("#121212"))
+        }
+
+        mainWebView = createConfiguredWebView(isTelegramView = false)
+        webContainer.addView(
+            mainWebView,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        btnFloatTg = Button(this).apply {
+            text = "✈️"
+            textSize = 15f
+            setPadding(0, 0, 0, 0)
+            setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.parseColor("#2AABEE"))
+                setStroke(dp(2), Color.parseColor("#93C5FD"))
+            }
+            elevation = dp(8).toFloat()
+            setOnClickListener { toggleTelegramTopPopup() }
+        }
+        val floatLp = FrameLayout.LayoutParams(dp(40), dp(40)).apply {
+            gravity = Gravity.TOP or Gravity.END
+            setMargins(0, dp(10), dp(10), 0)
+        }
+        webContainer.addView(btnFloatTg, floatLp)
+
+        tgPopupCard = buildCompactTelegramPopupCard()
+        tgPopupCard.visibility = View.GONE
+        webContainer.addView(tgPopupCard)
+
+        root.addView(
+            webContainer,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+        )
+
+        setContentView(root)
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (isBotLocked && isPopupVisible) {
+                    toast("🔒 বট লক করা আছে! বের হতে Unlock চাপুন")
+                    enforceBotStayLocked()
+                    return
+                }
+                if (isPopupVisible) {
+                    hideTelegramTopPopup()
+                    return
+                }
+                if (mainWebView.canGoBack()) {
+                    mainWebView.goBack()
+                } else {
+                    finish()
+                }
+            }
+        })
+
+        mainWebView.loadUrl(DEFAULT_WEB_URL)
+
+        if (isBotLocked && lockedBotSlug.isNotBlank()) {
+            showTelegramTopPopup(autoOpen = true)
+            handler.postDelayed({ enforceBotStayLocked() }, 1800)
+        }
+    }
+
+    private fun buildCompactTelegramPopupCard(): LinearLayout {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#17212B"))
+                cornerRadius = dp(12).toFloat()
+                setStroke(dp(2), Color.parseColor("#2AABEE"))
+            }
+            elevation = dp(16).toFloat()
+        }
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(Color.parseColor("#1E2C3A"))
+            setPadding(dp(10), dp(4), dp(6), dp(4))
+        }
+
+        val titleTv = TextView(this).apply {
+            text = "✈️ Telegram Login"
+            setTextColor(Color.WHITE)
+            textSize = 12.5f
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+
+        val btnSizeToggle = Button(this).apply {
+            text = "↕"
+            textSize = 12f
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#2B5278"))
+            minimumWidth = dp(30)
+            minWidth = dp(30)
+            setPadding(dp(6), 0, dp(6), 0)
+            setOnClickListener { togglePopupSize() }
+        }
+
+        val btnClosePopup = Button(this).apply {
+            text = "✕"
+            textSize = 12f
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#991B1B"))
+            minimumWidth = dp(30)
+            minWidth = dp(30)
+            setPadding(dp(6), 0, dp(6), 0)
+            setOnClickListener {
+                if (isBotLocked) {
+                    toast("🔒 বট লক করা আছে! আগে Unlock করুন")
+                    enforceBotStayLocked()
+                } else {
+                    hideTelegramTopPopup()
+                }
+            }
+        }
+
+        val hBtnLp = LinearLayout.LayoutParams(dp(32), dp(28)).apply {
+            setMargins(dp(4), 0, 0, 0)
+        }
+
+        header.addView(titleTv)
+        header.addView(btnSizeToggle, hBtnLp)
+        header.addView(btnClosePopup, hBtnLp)
+        card.addView(header)
+
+        tgLoginWebView = createConfiguredWebView(isTelegramView = true)
+        card.addView(
+            tgLoginWebView,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        val cardLp = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            dp(330)
+        ).apply {
+            gravity = Gravity.TOP
+            setMargins(dp(10), dp(10), dp(10), dp(10))
+        }
+        card.layoutParams = cardLp
+        return card
+    }
+
+    private fun toggleTelegramTopPopup() {
+        if (isPopupVisible) {
+            if (isBotLocked) {
+                enforceBotStayLocked()
+                toast("🔒 বট লক করা আছে — লগইন ও চ্যাট সক্রিয়")
+            } else {
+                hideTelegramTopPopup()
+            }
+        } else {
+            showTelegramTopPopup(autoOpen = false)
+        }
+    }
+
+    private fun showTelegramTopPopup(autoOpen: Boolean) {
+        isPopupVisible = true
+        tgPopupCard.visibility = View.VISIBLE
+        btnFloatTg.visibility = View.GONE
+
+        val targetUrl = if (isBotLocked && lockedBotUrl.isNotBlank()) lockedBotUrl else TG_WEB_URL
+        if (!tgLoadedOnce || autoOpen) {
+            tgLoadedOnce = true
+            tgLoginWebView.loadUrl(targetUrl)
+        }
+        if (isBotLocked && lockedBotSlug.isNotBlank()) {
+            handler.postDelayed({ enforceBotStayLocked() }, 1200)
+        }
+    }
+
+    private fun hideTelegramTopPopup() {
+        isPopupVisible = false
+        isPopupExpanded = false
+        tgPopupCard.visibility = View.GONE
+        btnFloatTg.visibility = View.VISIBLE
+    }
+
+    private fun togglePopupSize() {
+        isPopupExpanded = !isPopupExpanded
+        val currentLp = tgPopupCard.layoutParams as FrameLayout.LayoutParams
+        currentLp.height = if (isPopupExpanded) dp(450) else dp(330)
+        tgPopupCard.layoutParams = currentLp
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun createConfiguredWebView(isTelegramView: Boolean): WebView {
+        return WebView(this).apply {
+            setBackgroundColor(Color.parseColor("#0E1621"))
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.databaseEnabled = true
+            settings.cacheMode = WebSettings.LOAD_DEFAULT
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+            settings.userAgentString =
+                "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+
+            CookieManager.getInstance().setAcceptCookie(true)
+            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+
+            if (isTelegramView) {
+                addJavascriptInterface(TgBotBridge(), "TgBotBridge")
+            }
+            webChromeClient = WebChromeClient()
+
+            webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                    if (!isTelegramView) return false
+                    val targetUrl = request?.url?.toString() ?: return false
+                    if (isBotLocked && lockedBotSlug.isNotBlank()) {
+                        val lower = targetUrl.lowercase()
+                        val slugLower = lockedBotSlug.lowercase()
+                        val allowed = lower.contains("web.telegram.org") ||
+                            lower.contains("t.me/$slugLower") ||
+                            lower.contains("tg://resolve?domain=$slugLower")
+                        if (!allowed) {
+                            toast("🔒 বট লক করা আছে (@$lockedBotSlug) — অন্য পেজে যাওয়া বন্ধ")
+                            enforceBotStayLocked()
+                            return true
+                        }
+                    }
+                    return false
+                }
+
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    if (isTelegramView && isBotLocked && lockedBotSlug.isNotBlank()) {
+                        keepSessionAndBotAlive()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun restoreBotLockState() {
+        try {
+            val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            isBotLocked = prefs.getBoolean(KEY_LOCKED, false)
+            lockedBotSlug = prefs.getString(KEY_BOT_SLUG, "") ?: ""
+            lockedBotUrl = prefs.getString(KEY_BOT_URL, "") ?: ""
+        } catch (_: Exception) {}
+    }
+
+    private fun saveBotLockState() {
+        try {
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+                .putBoolean(KEY_LOCKED, isBotLocked)
+                .putString(KEY_BOT_SLUG, lockedBotSlug)
+                .putString(KEY_BOT_URL, lockedBotUrl)
+                .apply()
+        } catch (_: Exception) {}
+    }
+
+    private fun toggleLockCurrentBot() {
+        if (isBotLocked) {
+            isBotLocked = false
+            lockedBotSlug = ""
+            lockedBotUrl = ""
+            saveBotLockState()
+            btnLockBot.text = "🔓 Lock Bot"
+            btnLockBot.setBackgroundColor(Color.parseColor("#2563EB"))
+            tvStatus.text = "🔓 বট আনলক করা হয়েছে"
+            toast("🔓 Bot Unlocked")
+            return
+        }
+
+        if (!isPopupVisible) {
+            showTelegramTopPopup(autoOpen = false)
+            toast("⚠️ আগে উপরে টেলিগ্রামে লগইন করে বট ওপেন করুন, তারপর Lock Bot চাপুন")
+            return
+        }
+
+        val jsDetectBot = """
+            (function() {
+                try {
+                    var u = window.location.href || '';
+                    var hashMatch = u.match(/#[@]?([A-Za-z0-9_]+bot)/i);
+                    var pathMatch = u.match(/t\.me\/([A-Za-z0-9_]+bot)/i);
+                    var titleEl = document.querySelector('.chat-info .peer-title, .top-bar .peer-title, .ChatInfo .title, h3');
+                    var titleTxt = titleEl ? (titleEl.innerText || '').trim() : '';
+                    var botName = '';
+                    if (hashMatch && hashMatch[1]) botName = hashMatch[1];
+                    else if (pathMatch && pathMatch[1]) botName = pathMatch[1];
+                    if (!botName && titleTxt) {
+                        var mTitle = titleTxt.match(/([A-Za-z0-9_]+bot)/i);
+                        if (mTitle && mTitle[1]) botName = mTitle[1];
+                    }
+                    window.TgBotBridge.onBotDetected(botName, titleTxt, u);
+                } catch(e) {
+                    window.TgBotBridge.onBotDetected('', '', window.location.href || '');
+                }
+            })();
+        """.trimIndent()
+        tgLoginWebView.evaluateJavascript(jsDetectBot, null)
+    }
+
+    private fun applyBotLock(slug: String, title: String, url: String) {
+        val cleanSlug = slug.removePrefix("@").trim()
+        if (cleanSlug.isBlank()) {
+            toast("⚠️ আগে বটের চ্যাট ওপেন করুন, তারপর Lock Bot চাপুন")
+            return
+        }
+        isBotLocked = true
+        lockedBotSlug = cleanSlug
+        lockedBotUrl = if (url.contains("#")) url else "$TG_WEB_URL#@$cleanSlug"
+        saveBotLockState()
+
+        btnLockBot.text = "🔒 Locked (@$cleanSlug)"
+        btnLockBot.setBackgroundColor(Color.parseColor("#15803D"))
+        val label = if (title.isNotBlank()) "$title (@$cleanSlug)" else "@$cleanSlug"
+        tvStatus.text = "🔒 Bot Locked: $label — লগইন সক্রিয়"
+        toast("🔒 বট লক করা হয়েছে: @$cleanSlug (সর্বদা লগইন থাকবে)")
+        keepSessionAndBotAlive()
+    }
+
+    private fun keepSessionAndBotAlive() {
+        if (!isBotLocked || lockedBotSlug.isBlank()) return
+        try {
+            CookieManager.getInstance().flush()
+        } catch (_: Exception) {}
+        enforceBotStayLocked()
+    }
+
+    private fun enforceBotStayLocked() {
+        if (!isBotLocked || lockedBotSlug.isBlank()) return
+        val slugEsc = escapeJs(lockedBotSlug)
+        val js = """
+            (function() {
+                try {
+                    var slug = '$slugEsc'.toLowerCase();
+                    var href = window.location.href || '';
+                    if (href.toLowerCase().indexOf(slug) === -1) {
+                        if (href.indexOf('web.telegram.org/k/') !== -1) {
+                            window.location.hash = '@$slugEsc';
+                        } else {
+                            window.location.href = 'https://web.telegram.org/k/#@$slugEsc';
+                        }
+                    }
+                    var chatInput = document.querySelector('.input-message-input, [contenteditable="true"]');
+                    if (chatInput) chatInput.setAttribute('data-tg-locked-bot', slug);
+                } catch(e) {}
+            })();
+        """.trimIndent()
+        tgLoginWebView.evaluateJavascript(js, null)
+    }
+
+    private fun startSingleTaskFromBot() {
+        if (!isBotLocked || lockedBotSlug.isBlank()) {
+            toast("⚠️ প্রথমে বট সিলেক্ট করে Lock Bot চাপুন")
+            return
+        }
+        if (isTaskInProgress) {
+            toast("⏳ একটি টাস্ক ইতিমধ্যে চলছে...")
+            return
+        }
+
+        if (!isPopupVisible) {
+            showTelegramTopPopup(autoOpen = false)
+        }
+        keepSessionAndBotAlive()
+        isTaskInProgress = true
+        tvStatus.text = "🎯 @$lockedBotSlug — টাস্ক নেওয়া হচ্ছে..."
+
+        val jsTriggerTaskAndRead = """
+            (function() {
+                try {
+                    function clickTaskButton() {
+                        var candidates = document.querySelectorAll('button, .reply-markup-button, .btn-primary, div[role="button"], span');
+                        for (var i = 0; i < candidates.length; i++) {
+                            var el = candidates[i];
+                            var r = el.getBoundingClientRect();
+                            if (!r || r.width <= 0 || r.height <= 0) continue;
+                            var txt = (el.innerText || el.textContent || '').trim().toLowerCase();
+                            if (txt === 'task' || txt === 'new task' || txt === 'get task' || txt.indexOf('task') !== -1) {
+                                el.click();
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+
+                    function readLatestTaskText() {
+                        var msgs = document.querySelectorAll('.message .text-content, .bubble .message, .translatable-message, .message');
+                        for (var i = msgs.length - 1; i >= 0; i--) {
+                            var t = (msgs[i].innerText || '').trim();
+                            if (t.length > 4 && (t.toLowerCase().indexOf('pass') !== -1 || t.toLowerCase().indexOf('name') !== -1 || t.indexOf(':') !== -1 || t.indexOf('\n') !== -1)) {
+                                return t;
+                            }
+                        }
+                        return msgs.length > 0 ? (msgs[msgs.length - 1].innerText || '').trim() : '';
+                    }
+
+                    var clicked = clickTaskButton();
+                    setTimeout(function() {
+                        var raw = readLatestTaskText();
+                        window.TgBotBridge.onTaskFetched(raw, clicked);
+                    }, 1800);
+                } catch(e) {
+                    window.TgBotBridge.onTaskError(String(e));
+                }
+            })();
+        """.trimIndent()
+
+        tgLoginWebView.evaluateJavascript(jsTriggerTaskAndRead, null)
+    }
+
+    private fun parseNameAndPassword(rawTask: String): Pair<String, String>? {
+        if (rawTask.isBlank()) return null
+
+        val nameRegex = Regex("(?i)(?:full\\s*name|name|user(?:name)?)\\s*[:=\\-]\\s*([^\\n|;,]+)")
+        val passRegex = Regex("(?i)(?:pass(?:word)?|pwd)\\s*[:=\\-]\\s*([^\\n|;,]+)")
+
+        val foundName = nameRegex.find(rawTask)?.groupValues?.get(1)?.trim().orEmpty()
+        val foundPass = passRegex.find(rawTask)?.groupValues?.get(1)?.trim().orEmpty()
+
+        if (foundName.isNotBlank() && foundPass.isNotBlank()) {
+            return Pair(foundName, foundPass)
+        }
+
+        val lines = rawTask.lines().map { it.trim() }.filter { it.isNotBlank() }
+        if (lines.size >= 2) {
+            val l0 = lines[0].substringAfter(":").trim()
+            val l1 = lines[1].substringAfter(":").trim()
+            if (l0.isNotBlank() && l1.isNotBlank()) return Pair(l0, l1)
+        }
+
+        val parts = rawTask.trim().split(Regex("[\\s|:;]+")).filter { it.isNotBlank() }
+        if (parts.size >= 2) {
+            return Pair(parts[0], parts[1])
+        }
+
+        return null
+    }
+
+    private fun launchIgWithTaskCredentials(name: String, pass: String, rawTask: String) {
+        pendingTaskRaw = rawTask
+        pendingName = name
+        pendingPass = pass
+
+        val host = hostActivityRef?.get()
+        if (host == null || host.isFinishing || host.isDestroyed) {
+            isTaskInProgress = false
+            toast("❌ MainActivity কানেক্ট করা নেই")
+            return
+        }
+
+        tvStatus.text = "✅ Task: $name / $pass — IG শুরু হচ্ছে..."
+        toast("✅ Task পাওয়া গেছে: $name")
+
+        host.runOnUiThread {
+            try {
+                host.customFirstName = name
+                host.customLastName = ""
+                host.customPassword = pass
+                host.useCustomData = true
+                host.currentMailPassword = pass
+                host.savePassword(pass)
+                host.saveCurrentMail()
+                host.startIgAutomationCustom(name, pass)
+            } catch (e: Exception) {
+                isTaskInProgress = false
+                toast("❌ IG শুরু করতে সমস্যা: ${e.message}")
+            }
+        }
+    }
+
+    private fun submit2FaAndCookiesToBot() {
+        if (!isBotLocked || lockedBotSlug.isBlank()) {
+            toast("⚠️ বট লক করা নেই")
+            return
+        }
+        if (!isPopupVisible) {
+            showTelegramTopPopup(autoOpen = false)
+        }
+        keepSessionAndBotAlive()
+
+        val host = hostActivityRef?.get()
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+
+        val twoFaKey = (host?.current2FAKey ?: "").ifBlank {
+            prefs.getString("last_ig_2fa", "") ?: ""
+        }
+        val totpCode = if (twoFaKey.isNotBlank() && host != null) {
+            host.generateTotp(twoFaKey)
+        } else ""
+
+        val cookies = (host?.getInstagramCookiesPublic() ?: "").ifBlank {
+            prefs.getString("last_ig_cookies", "") ?: ""
+        }
+
+        if (twoFaKey.isBlank() && cookies.isBlank()) {
+            toast("⚠️ জমা দেওয়ার মতো 2FA বা Cookies পাওয়া যায়নি")
+            return
+        }
+
+        val payload = buildString {
+            if (pendingName.isNotBlank()) append("Name: $pendingName\n")
+            if (twoFaKey.isNotBlank()) append("2FA: $twoFaKey")
+            if (totpCode.isNotBlank()) append(" ($totpCode)")
+            if (twoFaKey.isNotBlank()) append("\n")
+            if (cookies.isNotBlank()) append("Cookies: $cookies")
+        }.trim()
+
+        val jsSendMessage = """
+            (function() {
+                try {
+                    var textToSend = '${escapeJs(payload)}';
+                    var input = document.querySelector('.input-message-input[contenteditable="true"], [contenteditable="true"], textarea.form-control');
+                    if (!input) {
+                        window.TgBotBridge.onSubmitStatus(false, 'Chat input পাওয়া যায়নি');
+                        return;
+                    }
+                    input.focus();
+                    if (input.tagName === 'TEXTAREA' || input.tagName === 'INPUT') {
+                        input.value = textToSend;
+                    } else {
+                        input.innerHTML = '';
+                        input.textContent = textToSend;
+                    }
+                    input.dispatchEvent(new InputEvent('input', { bubbles: true, data: textToSend }));
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+
+                    setTimeout(function() {
+                        var sendBtn = document.querySelector('button.send-message-button, .btn-send, button[aria-label*="Send"], button[title*="Send"]');
+                        if (sendBtn && !sendBtn.disabled) {
+                            sendBtn.click();
+                            window.TgBotBridge.onSubmitStatus(true, '2FA & Cookies বটে পাঠানো হয়েছে');
+                        } else {
+                            var ev = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true });
+                            input.dispatchEvent(ev);
+                            window.TgBotBridge.onSubmitStatus(true, '2FA & Cookies বটে পাঠানো হয়েছে');
+                        }
+                    }, 350);
+                } catch(e) {
+                    window.TgBotBridge.onSubmitStatus(false, String(e));
+                }
+            })();
+        """.trimIndent()
+
+        tgLoginWebView.evaluateJavascript(jsSendMessage, null)
+    }
+
+    private inner class TgBotBridge {
+        @JavascriptInterface
+        fun onBotDetected(slug: String, title: String, url: String) {
+            runOnUiThread {
+                applyBotLock(slug, title, url)
+            }
+        }
+
+        @JavascriptInterface
+        fun onTaskFetched(rawTask: String, clicked: Boolean) {
+            runOnUiThread {
+                val parsed = parseNameAndPassword(rawTask)
+                if (parsed == null) {
+                    isTaskInProgress = false
+                    tvStatus.text = "⚠️ @$lockedBotSlug — টাস্ক পার্স করা যায়নি"
+                    toast("⚠️ টাস্কে নাম/পাসওয়ার্ড পাওয়া যায়নি")
+                    return@runOnUiThread
+                }
+                launchIgWithTaskCredentials(parsed.first, parsed.second, rawTask)
+            }
+        }
+
+        @JavascriptInterface
+        fun onTaskError(err: String) {
+            runOnUiThread {
+                isTaskInProgress = false
+                tvStatus.text = "❌ Task Error: $err"
+                toast("❌ Task Error: $err")
+            }
+        }
+
+        @JavascriptInterface
+        fun onSubmitStatus(ok: Boolean, message: String) {
+            runOnUiThread {
+                isTaskInProgress = false
+                if (ok) {
+                    tvStatus.text = "✅ সম্পন্ন: $message (@$lockedBotSlug)"
+                    toast("✅ $message")
+                } else {
+                    tvStatus.text = "⚠️ $message"
+                    toast("⚠️ $message")
+                }
+            }
+        }
+    }
+
+    private fun escapeJs(s: String): String =
+        s.replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "")
+
+    private fun toast(msg: String) {
+        runOnUiThread { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        try {
+            CookieManager.getInstance().flush()
+        } catch (_: Exception) {}
+    }
+
+    override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
+        super.onDestroy()
+    }
+}
